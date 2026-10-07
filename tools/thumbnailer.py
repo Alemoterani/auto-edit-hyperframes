@@ -1089,11 +1089,16 @@ def _cover_concat_cmd(concat_list: Path, output: Path) -> list[str]:
     moov atom at the END (no faststart) and resets major_brand to `isom`.
     That combination is accepted by browser uploads (whole file read locally)
     but rejected as "invalid format" by the iOS YouTube app after AirDrop.
+
+    Re-encodes instead of `-c copy`: the cover and the body come from different
+    x264 runs (different SPS/PPS), and a stream copy keeps only the cover's
+    parameter sets for the whole track. ffmpeg tolerates that; Windows Media
+    Foundation (Media Player, Filmes e TV) shows a black/garbled frame.
     """
     return [
         "ffmpeg", "-y",
         "-f", "concat", "-safe", "0", "-i", str(concat_list),
-        "-c", "copy",
+        "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p",
         "-movflags", "+faststart", "-brand", "mp42",
         str(output),
     ]

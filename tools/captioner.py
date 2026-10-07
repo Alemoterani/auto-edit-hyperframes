@@ -530,10 +530,12 @@ def _resolve_caption_ffmpeg() -> str:
     for d in os.environ.get("PATH", "").split(os.pathsep):
         if not d:
             continue
-        p = os.path.join(d, "ffmpeg")
-        if p not in seen and os.path.isfile(p) and os.access(p, os.X_OK):
-            seen.add(p)
-            candidates.append(p)
+        # Windows binaries carry .exe; a bare "ffmpeg" never matches there.
+        for name in ("ffmpeg", "ffmpeg.exe"):
+            p = os.path.join(d, name)
+            if p not in seen and os.path.isfile(p) and os.access(p, os.X_OK):
+                seen.add(p)
+                candidates.append(p)
 
     for binary in candidates:
         if _ffmpeg_has_subtitles(binary):
@@ -548,20 +550,20 @@ def _resolve_caption_ffmpeg() -> str:
 
 
 def _burn_captions(video: Path, ass: Path, output: Path) -> None:
-    # ASS path must use forward slashes and be absolute
-    ass_norm = str(ass.resolve()).replace("\\", "/")
-
+    # The filter arg is passed by bare name with cwd at the ASS's folder: a full
+    # path breaks the filter syntax on a drive colon ("C:") or a comma in a
+    # folder name, and escaping that across platforms is fragile.
     ffmpeg_bin = _resolve_caption_ffmpeg()
     cmd = [
         ffmpeg_bin, "-y",
-        "-i", str(video),
-        "-vf", f"subtitles='{ass_norm}'",
+        "-i", str(video.resolve()),
+        "-vf", f"subtitles='{ass.name}'",
         "-c:a", "copy",
         "-movflags", "+faststart", "-brand", "mp42",
-        str(output),
+        str(output.resolve()),
     ]
     print("[captioner] Burning captions...")
-    result = subprocess.run(cmd)
+    result = subprocess.run(cmd, cwd=ass.resolve().parent)
     if result.returncode != 0:
         raise RuntimeError("FFmpeg failed during caption burning")
 

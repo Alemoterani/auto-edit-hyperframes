@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import shutil
 import struct
 import subprocess
 import sys
@@ -302,7 +303,9 @@ REGRAS — leia com atenção:
         # the CLI's own cold start (~30s) plus the correction itself, or the
         # step always "times out" and the raw Whisper text silently survives.
         result = subprocess.run(
-            ["claude", "-p"],
+            # which() resolves the npm `claude.cmd` shim on Windows; a bare
+            # "claude" never reaches CreateProcess as a .cmd.
+            [shutil.which("claude") or "claude", "-p"],
             input=prompt,
             capture_output=True,
             text=True,
@@ -393,6 +396,9 @@ REGRAS — leia com atenção:
 
     except subprocess.TimeoutExpired:
         print("[extract] Claude correction timed out — using raw Whisper output.", file=sys.stderr)
+        return words, segments
+    except OSError as e:
+        print(f"[extract] Claude CLI unavailable ({e}) — using raw Whisper output.", file=sys.stderr)
         return words, segments
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         print(f"[extract] Claude correction parse error ({e}) — using raw Whisper output.", file=sys.stderr)

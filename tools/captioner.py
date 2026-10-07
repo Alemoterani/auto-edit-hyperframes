@@ -324,7 +324,7 @@ def caption(workspace: Path) -> None:
 
     # 5. Burn captions into video
     output = workspace / "captioned_video.mp4"
-    _burn_captions(edited_video, ass_path, output)
+    _burn_captions(edited_video, ass_path, output, pipeline.get("video_filter"))
     print(f"[captioner] Done → {output}")
 
 
@@ -549,7 +549,10 @@ def _resolve_caption_ffmpeg() -> str:
     )
 
 
-def _burn_captions(video: Path, ass: Path, output: Path) -> None:
+def _burn_captions(video: Path, ass: Path, output: Path, pre_filter: str | None = None) -> None:
+    """pre_filter: optional ffmpeg -vf chain (pipeline.json "video_filter", e.g.
+    upscale + color fix) run BEFORE the subtitles, so text renders at the final
+    resolution instead of being upscaled with the frame."""
     # The filter arg is passed by bare name with cwd at the ASS's folder: a full
     # path breaks the filter syntax on a drive colon ("C:") or a comma in a
     # folder name, and escaping that across platforms is fragile.
@@ -557,7 +560,7 @@ def _burn_captions(video: Path, ass: Path, output: Path) -> None:
     cmd = [
         ffmpeg_bin, "-y",
         "-i", str(video.resolve()),
-        "-vf", f"subtitles='{ass.name}'",
+        "-vf", f"{pre_filter + ',' if pre_filter else ''}subtitles='{ass.name}'",
         "-c:a", "copy",
         "-movflags", "+faststart", "-brand", "mp42",
         str(output.resolve()),

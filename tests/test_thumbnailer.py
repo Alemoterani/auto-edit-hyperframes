@@ -190,6 +190,13 @@ class TestCoverConcatCmd:
         assert "-brand" in cmd
         assert cmd[cmd.index("-brand") + 1] == "mp42"
 
+    def test_reencodes_with_keyframe_after_cover(self):
+        # copy would keep the cover's SPS/PPS for the whole track (breaks Windows
+        # players); the forced keyframe keeps the cover detectable for replacement
+        cmd = _cover_concat_cmd(Path("/tmp/list.txt"), Path("/tmp/out.mp4"))
+        assert "copy" not in cmd
+        assert cmd[cmd.index("-force_key_frames") + 1] == f"expr:eq(n,{COVER_FRAMES})"
+
     def test_flags_before_output(self):
         # ffmpeg output options must precede the output path
         cmd = _cover_concat_cmd(Path("/tmp/list.txt"), Path("/tmp/out.mp4"))

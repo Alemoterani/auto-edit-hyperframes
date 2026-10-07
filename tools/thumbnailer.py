@@ -1094,11 +1094,16 @@ def _cover_concat_cmd(concat_list: Path, output: Path) -> list[str]:
     x264 runs (different SPS/PPS), and a stream copy keeps only the cover's
     parameter sets for the whole track. ffmpeg tolerates that; Windows Media
     Foundation (Media Player, Filmes e TV) shows a black/garbled frame.
+
+    The forced keyframe right after the cover keeps `_cover_strip_point` working:
+    a later run finds the cover between the first two keyframes and replaces it
+    instead of stacking a second cover on top.
     """
     return [
         "ffmpeg", "-y",
         "-f", "concat", "-safe", "0", "-i", str(concat_list),
         "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p",
+        "-force_key_frames", f"expr:eq(n,{COVER_FRAMES})",
         "-movflags", "+faststart", "-brand", "mp42",
         str(output),
     ]

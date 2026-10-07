@@ -16,6 +16,7 @@ const FIELDS = [
   ["youtube_description", "Descrição"],
   ["hashtags", "Hashtags"],
   ["tags", "Tags"],
+  ["pinned_comment", "Comentário pra fixar"],
 ];
 
 function valueText(v) {

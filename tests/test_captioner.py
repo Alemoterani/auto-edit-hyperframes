@@ -304,3 +304,14 @@ class TestResolveCaptionFfmpeg:
         monkeypatch.setattr(c, "_ffmpeg_has_subtitles", lambda b: False)
         with pytest.raises(RuntimeError, match="libass"):
             _resolve_caption_ffmpeg()
+
+
+class TestAssToCss:
+    def test_ass_bgr_becomes_css_rgb(self):
+        from tools.captioner import _ass_to_css
+        assert _ass_to_css("&H0045FF&") == "#FF4500"
+        assert _ass_to_css("&HFFFFFF&") == "#FFFFFF"
+
+    def test_css_color_passes_through(self):
+        from tools.captioner import _ass_to_css
+        assert _ass_to_css("#22C55E") == "#22C55E"

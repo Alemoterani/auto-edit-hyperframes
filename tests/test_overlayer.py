@@ -28,7 +28,7 @@ from auto_edit.overlay_assets import overlay_search_dirs
 
 # ── Frame-rate handling (2x/slow-motion regression) ──────────────────────────
 
-def _capture_cmd(monkeypatch, fps="30000/1001", has_audio=True):
+def _capture_cmd(monkeypatch, fps="30000/1001", has_audio=True, asset=Path("cta.mp4")):
     """Run _run_ffmpeg_overlay with FFmpeg stubbed; return the argv it built."""
     captured = {}
 
@@ -47,7 +47,7 @@ def _capture_cmd(monkeypatch, fps="30000/1001", has_audio=True):
 
     overlayer._run_ffmpeg_overlay(
         Path("edit.mp4"),
-        [{"asset": Path("cta.mp4"), "start": 2.0, "end": 8.0}],
+        [{"asset": asset, "start": 2.0, "end": 8.0}],
         Path("out.mp4"),
     )
     return captured["cmd"]
@@ -66,7 +66,7 @@ def test_both_streams_are_normalized_before_overlay(monkeypatch):
     filters = cmd[cmd.index("-filter_complex") + 1]
 
     assert "[0:v]fps=30000/1001[base]" in filters  # main video
-    assert "[1:v]fps=30000/1001,scale=" in filters  # overlay asset
+    assert "[1:v]setpts=PTS-STARTPTS+2.000/TB,fps=30000/1001,scale=" in filters  # overlay asset
     assert "[base][ck0]overlay=" in filters
 
 
@@ -167,3 +167,51 @@ class TestOverlaySearchDirs:
         # overlay_search_dirs resolves the root (adds the drive on Windows).
         root = repo.resolve()
         assert dirs == [root / "assets" / "overlays", root / "overlays"]
+
+
+# ── HyperFrames templates (alpha .mov, rendered on demand) ───────────────────
+
+class TestTemplateOverlays:
+    def test_template_is_rendered_and_placed(self, tmp_path):
+        rendered = tmp_path / "lower_third.mov"
+        calls = []
+        def render(ov):
+            calls.append(ov)
+            return rendered
+        overlays = [{"template": "lower_third", "vars": {"title": "Oi"}, "original_start": 25.0}]
+        found, missing, removed = _resolve_overlays(overlays, [tmp_path], KEPT, render)
+        assert not missing and not removed
+        assert found[0][1] == rendered and found[0][2] == pytest.approx(15.0)
+        assert calls == overlays
+
+    def test_template_inside_a_cut_is_not_rendered(self, tmp_path):
+        def render(ov):
+            raise AssertionError("must not render a removed overlay")
+        overlays = [{"template": "cta", "original_start": 15.0}]
+        found, missing, removed = _resolve_overlays(overlays, [tmp_path], KEPT, render)
+        assert removed == ["template:cta"] and not found
+
+    def test_failed_render_counts_as_missing(self, tmp_path):
+        def render(ov):
+            raise RuntimeError("npx not found")
+        overlays = [{"template": "cta", "original_start": 5.0}]
+        found, missing, removed = _resolve_overlays(overlays, [tmp_path], KEPT, render)
+        assert missing == ["template:cta"] and not found
+
+
+def test_alpha_asset_skips_chromakey(monkeypatch):
+    graph = " ".join(_capture_cmd(monkeypatch, asset=Path("hf_cache/cta-abc.mov")))
+    assert "chromakey" not in graph
+    assert "format=yuva420p" in graph
+
+
+def test_green_screen_mp4_still_uses_chromakey(monkeypatch):
+    graph = " ".join(_capture_cmd(monkeypatch))
+    assert "chromakey" in graph
+
+
+def test_overlay_starts_playing_at_its_placement(monkeypatch):
+    # Without the PTS shift the overlay plays from t=0 and is already over
+    # (frozen on its last frame) by the time `enable` turns it on at 2s.
+    graph = " ".join(_capture_cmd(monkeypatch))
+    assert "setpts=PTS-STARTPTS+2.000/TB" in graph

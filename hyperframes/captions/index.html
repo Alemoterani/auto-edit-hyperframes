@@ -1,0 +1,71 @@
+<!doctype html>
+<!-- CapCut-style word captions for shorts, rendered over the edited video.
+     Data: window.AE_DATA = {groups: [[{word, start, end}, ...], ...], style: {...}}
+     (written by tools/captioner.py — same groups as the ASS path).
+     Root size/duration are rewritten per render to match the edited video. -->
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800;900&display=block" />
+    <script src="data.js"></script>
+    <style>
+      html, body { margin: 0; background: transparent; }
+      #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; }
+      .group {
+        position: absolute; left: 6%; right: 6%; bottom: var(--bottom);
+        display: none; text-align: center; line-height: 1.15;
+        font-family: var(--font), "Segoe UI", Arial, sans-serif; font-weight: 900;
+        font-size: var(--size); color: var(--text); text-transform: uppercase;
+        -webkit-text-stroke: calc(var(--size) * 0.06) #000; paint-order: stroke fill;
+        text-shadow: 0 0.6vmin 1.2vmin rgba(0, 0, 0, 0.55);
+      }
+      .w { display: inline-block; margin: 0 0.3em; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="10" data-width="1080" data-height="1920"></div>
+    <script>
+      const d = window.AE_DATA || { groups: [] };
+      const s = Object.assign(
+        { text: "#FFFFFF", highlight: "#FF4500", font: "Montserrat", size_vmin: 7.5, bottom_pct: 22 },
+        d.style || {}
+      );
+      const root = document.getElementById("root");
+      root.style.setProperty("--text", s.text);
+      root.style.setProperty("--font", s.font);
+      root.style.setProperty("--size", s.size_vmin + "vmin");
+      root.style.setProperty("--bottom", s.bottom_pct + "%");
+
+      const tl = gsap.timeline({ paused: true });
+      for (const group of d.groups) {
+        if (!group.length) continue;
+        const el = document.createElement("div");
+        el.className = "group";
+        const spans = group.map((w) => {
+          const span = document.createElement("span");
+          span.className = "w";
+          span.textContent = w.word.trim();
+          el.appendChild(span);
+          return span;
+        });
+        root.appendChild(el);
+
+        const start = group[0].start;
+        const end = group[group.length - 1].end;
+        tl.set(el, { display: "block" }, start)
+          .fromTo(el, { scale: 0.85, y: 20 }, { scale: 1, y: 0, duration: 0.12, ease: "back.out(2)" }, start)
+          .set(el, { display: "none" }, end);
+        group.forEach((w, i) => {
+          // Highlight holds until the next word starts, like the ASS path.
+          const off = i < group.length - 1 ? group[i + 1].start : w.end;
+          tl.set(spans[i], { color: s.highlight, scale: 1.08 }, w.start)
+            .set(spans[i], { color: s.text, scale: 1 }, Math.max(w.start + 0.01, off));
+        });
+      }
+      tl.set({}, {}, parseFloat(root.dataset.duration)); // timeline spans the whole video
+      window.__timelines = window.__timelines || {};
+      window.__timelines.main = tl;
+    </script>
+  </body>
+</html>

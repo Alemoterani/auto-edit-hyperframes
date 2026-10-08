@@ -101,6 +101,7 @@ decrescente e marca os candidatos que se sobrepõem.
 | `agents/` | Prompts para stages LLM (planner, reviewer, evaluator, metadata) |
 | `ralph.sh` | Orquestrador bash que executa o pipeline stage-by-stage |
 | `assets/` | Fontes, overlays, sons para composição de vídeo |
+| `hyperframes/` | Templates HTML (overlays `lower_third`/`cta`/`highlight` + `captions`) renderizados com alpha por `auto_edit/hyperframes.py` via `npx hyperframes` |
 
 ## Convenções
 

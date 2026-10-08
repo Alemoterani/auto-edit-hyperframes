@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -324,7 +325,15 @@ def caption(workspace: Path) -> None:
 
     # 5. Burn captions into video
     output = workspace / "captioned_video.mp4"
-    _burn_captions(edited_video, ass_path, output, pipeline.get("video_filter"))
+    pre_filter = pipeline.get("video_filter")
+    if style.get("engine") == "hyperframes":
+        try:
+            _overlay_hyperframes_captions(edited_video, groups, style, workspace, output, pre_filter)
+            print(f"[captioner] Done (hyperframes) → {output}")
+            return
+        except Exception as exc:  # noqa: BLE001 -- any failure falls back to the ASS burn
+            print(f"[captioner] WARNING: hyperframes captions failed, falling back to ASS:\n{exc}")
+    _burn_captions(edited_video, ass_path, output, pre_filter)
     print(f"[captioner] Done → {output}")
 
 
@@ -602,6 +611,78 @@ def _burn_captions(video: Path, ass: Path, output: Path, pre_filter: str | None 
     result = subprocess.run(cmd, cwd=ass.resolve().parent)
     if result.returncode != 0:
         raise RuntimeError("FFmpeg failed during caption burning")
+
+
+# ── HyperFrames captions (caption_style.engine = "hyperframes") ───────────────
+
+def _ass_to_css(color: str) -> str:
+    """ASS "&HBBGGRR&" -> CSS "#RRGGBB" (CSS colors pass through unchanged)."""
+    hexpart = color.strip("&").upper().removeprefix("H")
+    if color.startswith("#") or len(hexpart) < 6:
+        return color
+    bb, gg, rr = hexpart[-6:-4], hexpart[-4:-2], hexpart[-2:]
+    return f"#{rr}{gg}{bb}"
+
+
+def _filtered_size(video: Path, pre_filter: str | None) -> tuple[int, int]:
+    """Frame size after pipeline.json "video_filter" (e.g. an upscale), so the
+    captions are rendered at the final resolution instead of being scaled."""
+    from auto_edit import probe
+    if not pre_filter:
+        return probe.video_size(video)
+    result = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-i", str(video.resolve()), "-frames:v", "1",
+         "-vf", f"{pre_filter},showinfo", "-f", "null", "-"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    m = re.search(r"\bs:(\d+)x(\d+)", result.stderr or "")
+    if not m:
+        raise RuntimeError(f"could not read frame size after video_filter {pre_filter!r}")
+    return int(m.group(1)), int(m.group(2))
+
+
+def _overlay_hyperframes_captions(
+    video: Path,
+    groups: list[list[dict]],
+    style: dict,
+    workspace: Path,
+    output: Path,
+    pre_filter: str | None = None,
+) -> None:
+    """Render the caption groups with hyperframes/captions (alpha .mov) and
+    composite them over the video, after the optional pre_filter."""
+    from auto_edit import hyperframes, probe
+
+    width, height = _filtered_size(video, pre_filter)
+    data = {
+        "groups": [[{"word": w["word"], "start": w["start"], "end": w["end"]} for w in g] for g in groups],
+        "style": {
+            "text": _ass_to_css(style["color_text"]),
+            "highlight": _ass_to_css(style["color_highlight"]),
+            "font": style["font_name"],
+        },
+    }
+    layer = hyperframes.render(
+        "captions", data, workspace / "hf_cache", width, height,
+        _get_duration(video), probe.video_fps(video),
+    )
+    base = f"[0:v]{pre_filter}[base];[base]" if pre_filter else "[0:v]"
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(video.resolve()),
+        "-i", str(layer.resolve()),
+        "-filter_complex", f"[1:v]format=yuva420p[cap];{base}[cap]overlay=0:0[outv]",
+        "-map", "[outv]", "-map", "0:a?",
+        "-c:a", "copy",
+        "-movflags", "+faststart", "-brand", "mp42",
+        str(output.resolve()),
+    ]
+    print("[captioner] Compositing hyperframes captions...")
+    result = subprocess.run(cmd)
+    # The ProRes layer is ~300 MB per minute; nothing reads it after this.
+    layer.unlink(missing_ok=True)
+    if result.returncode != 0:
+        raise RuntimeError("FFmpeg failed while compositing hyperframes captions")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

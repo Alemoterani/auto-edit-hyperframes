@@ -1,7 +1,8 @@
 """
 OVERLAYER stage
 Reads overlay_plan.json, remaps original timestamps to post-cut timeline,
-applies chroma key + overlay using FFmpeg.
+applies chroma key + overlay using FFmpeg. Entries with a "template" are
+rendered from <repo>/hyperframes/ (alpha .mov, no chroma key needed).
 Input:  workspace/edited_video.mp4
 Output: workspace/overlaid_video.mp4 (or skips if no overlays planned)
 """
@@ -14,7 +15,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from auto_edit import overlay_assets, probe  # noqa: E402  -- needs repo root on sys.path
+from auto_edit import hyperframes, overlay_assets, probe  # noqa: E402  -- needs repo root on sys.path
 
 
 def _overlay_search_dirs() -> list[Path]:
@@ -66,26 +67,42 @@ def _resolve_overlays(
     overlays: list[dict],
     search_dirs: list[Path],
     kept: list[tuple[float, float]],
+    render_template=None,
 ) -> tuple[list[tuple[dict, Path, float]], list[str], list[str]]:
     """Split planned overlays into (found, missing_asset, removed_by_cut).
 
     - found: ``(overlay, asset_path, post_cut_start)`` tuples ready to place.
     - missing_asset: file names not present in any search dir (a setup error).
     - removed_by_cut: trigger timestamps that fell inside a removed section.
+
+    Entries with ``template`` are rendered via ``render_template(ov) -> Path``
+    (only once we know the trigger survives the cut); a failed render counts as
+    a missing asset.
     """
     found: list[tuple[dict, Path, float]] = []
     missing: list[str] = []
     removed: list[str] = []
     for ov in overlays:
-        name = ov["file"]
-        asset = _find_overlay_file(name, search_dirs)
-        if asset is None:
-            missing.append(name)
-            continue
+        name = ov.get("file") or f"template:{ov.get('template')}"
         post_cut_start = _remap(float(ov["original_start"]), kept)
-        if post_cut_start is None:
-            removed.append(name)
-            continue
+        if "template" in ov:
+            if post_cut_start is None:
+                removed.append(name)
+                continue
+            try:
+                asset = render_template(ov)
+            except Exception as exc:  # noqa: BLE001 -- any render failure degrades like a missing asset
+                print(f"[overlayer] {name}: {exc}")
+                missing.append(name)
+                continue
+        else:
+            asset = _find_overlay_file(name, search_dirs)
+            if asset is None:
+                missing.append(name)
+                continue
+            if post_cut_start is None:
+                removed.append(name)
+                continue
         found.append((ov, asset, post_cut_start))
     return found, missing, removed
 
@@ -123,6 +140,9 @@ def _get_video_codec() -> tuple[str, list[str]]:
 CHROMA_COLOR = "0x00FF00"
 CHROMA_SIMILARITY = "0.15"
 CHROMA_BLEND = "0.05"
+DEFAULT_TEMPLATE_DURATION = 4.0
+# HyperFrames renders carry an alpha channel; green-screen MP4s need chromakey.
+ALPHA_SUFFIXES = (".mov", ".webm")
 
 
 def overlay(workspace: Path) -> None:
@@ -140,7 +160,17 @@ def overlay(workspace: Path) -> None:
     reviewed_plan = json.loads((workspace / "reviewed_plan.json").read_text())
     kept = _build_kept_intervals(reviewed_plan, pipeline)
 
-    found, missing, removed = _resolve_overlays(overlays, search_dirs, kept)
+    input_video = workspace / "edited_video.mp4"
+    vw, vh = _video_size(input_video)
+    fps = _video_fps(input_video)
+
+    def render_template(ov: dict) -> Path:
+        return hyperframes.render(
+            ov["template"], ov.get("vars", {}), workspace / "hf_cache",
+            vw, vh, float(ov.get("duration", DEFAULT_TEMPLATE_DURATION)), fps,
+        )
+
+    found, missing, removed = _resolve_overlays(overlays, search_dirs, kept, render_template)
 
     # A missing asset is a setup problem, but not a fatal one: the overlays live
     # outside the repo and a fresh install has none. Warn and render without it.
@@ -157,9 +187,8 @@ def overlay(workspace: Path) -> None:
     for ov, asset, post_cut_start in found:
         duration = _get_duration(asset)
         placed.append({"asset": asset, "start": post_cut_start, "end": post_cut_start + duration})
-        print(f"[overlayer] '{ov['file']}' -> post-cut {post_cut_start:.2f}s-{post_cut_start + duration:.2f}s")
+        print(f"[overlayer] '{ov.get('file') or ov.get('template')}' -> post-cut {post_cut_start:.2f}s-{post_cut_start + duration:.2f}s")
 
-    input_video = workspace / "edited_video.mp4"
     output_video = workspace / "overlaid_video.mp4"
     if placed:
         _run_ffmpeg_overlay(input_video, placed, output_video)
@@ -250,14 +279,19 @@ def _run_ffmpeg_overlay(
         idx = asset_index[p["asset"]]
         out_label = "outv" if i == len(placed) - 1 else f"ovchain{i}"
         enable = f"between(t,{p['start']:.3f},{p['end']:.3f})"
+        # Shift the overlay so its first frame lands at its start; otherwise it
+        # plays from t=0 and is already over (frozen last frame) when enabled.
         filter_parts.append(
-            f"[{idx}:v]" + (f"fps={fps}," if fps else "")
+            f"[{idx}:v]setpts=PTS-STARTPTS+{p['start']:.3f}/TB,"
+            + (f"fps={fps}," if fps else "")
             + f"scale=w={vw}:h={vh}:force_original_aspect_ratio=decrease,"
             f"pad={vw}:{vh}:(ow-iw)/2:(oh-ih)/2,setsar=1[ov_s{i}]"
         )
-        filter_parts.append(
-            f"[ov_s{i}]chromakey=color={CHROMA_COLOR}:similarity={CHROMA_SIMILARITY}:blend={CHROMA_BLEND}[ck{i}]"
-        )
+        if Path(p["asset"]).suffix.lower() in ALPHA_SUFFIXES:
+            key = "format=yuva420p"
+        else:
+            key = f"chromakey=color={CHROMA_COLOR}:similarity={CHROMA_SIMILARITY}:blend={CHROMA_BLEND}"
+        filter_parts.append(f"[ov_s{i}]{key}[ck{i}]")
         filter_parts.append(
             f"[{prev}][ck{i}]overlay=x=0:y=0:enable='{enable}'[{out_label}]"
         )

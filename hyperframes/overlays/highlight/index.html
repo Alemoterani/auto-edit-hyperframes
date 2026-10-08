@@ -1,0 +1,47 @@
+<!doctype html>
+<!-- Highlight card: a key term/phrase pinned top-right while the speaker explains it.
+     Data: window.AE_DATA = {label, text, accent} (written by auto_edit/hyperframes.py).
+     Root size/duration are rewritten per render to match the edited video. -->
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800;900&display=block" />
+    <script src="data.js"></script>
+    <style>
+      html, body { margin: 0; background: transparent; }
+      #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; font-family: Montserrat, "Segoe UI", Arial, sans-serif; }
+      #card {
+        position: absolute; right: 4%; top: 7%; max-width: 38%;
+        padding: 2vmin 2.6vmin; border-radius: 1.4vmin;
+        background: rgba(10, 10, 14, 0.85); border-left: 0.7vmin solid var(--accent);
+        box-shadow: 0 1vmin 3vmin rgba(0, 0, 0, 0.4);
+      }
+      #label { color: var(--accent); font-weight: 800; font-size: 2.2vmin; letter-spacing: 0.08em; text-transform: uppercase; }
+      #text { color: #fff; font-weight: 800; font-size: 4vmin; line-height: 1.15; margin-top: 0.6vmin; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="5" data-width="1920" data-height="1080">
+      <section id="card" class="clip" data-start="0" data-duration="5">
+        <div id="label"></div>
+        <div id="text"></div>
+      </section>
+    </div>
+    <script>
+      const d = Object.assign({ label: "", text: "", accent: "#FF4500" }, window.AE_DATA || {});
+      document.getElementById("text").textContent = d.text;
+      if (d.label) document.getElementById("label").textContent = d.label;
+      else document.getElementById("label").remove();
+      document.documentElement.style.setProperty("--accent", d.accent);
+
+      const total = parseFloat(document.getElementById("root").dataset.duration);
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo("#card", { x: 80, opacity: 0 }, { x: 0, opacity: 1, duration: 0.45, ease: "power3.out" }, 0)
+        .fromTo("#text", { y: 12, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35 }, 0.2)
+        .to("#card", { x: 80, opacity: 0, duration: 0.35, ease: "power2.in" }, Math.max(0.9, total - 0.4));
+      window.__timelines = window.__timelines || {};
+      window.__timelines.main = tl;
+    </script>
+  </body>
+</html>

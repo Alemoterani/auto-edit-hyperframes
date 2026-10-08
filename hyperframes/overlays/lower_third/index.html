@@ -1,0 +1,45 @@
+<!doctype html>
+<!-- Lower third: title + subtitle sliding in from the left.
+     Data: window.AE_DATA = {title, subtitle, accent} (written by auto_edit/hyperframes.py).
+     Root size/duration are rewritten per render to match the edited video. -->
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800;900&display=block" />
+    <script src="data.js"></script>
+    <style>
+      html, body { margin: 0; background: transparent; }
+      #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; font-family: Montserrat, "Segoe UI", Arial, sans-serif; }
+      #card { position: absolute; left: 5%; bottom: 12%; display: flex; align-items: stretch; }
+      #bar { width: 0.45vmin; min-width: 6px; background: var(--accent); }
+      #text { padding: 1.2vmin 2.2vmin; background: rgba(10, 10, 14, 0.82); }
+      #title { color: #fff; font-weight: 800; font-size: 4.4vmin; line-height: 1.1; }
+      #subtitle { color: var(--accent); font-weight: 600; font-size: 2.6vmin; margin-top: 0.4vmin; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="1920" data-height="1080">
+      <section id="card" class="clip" data-start="0" data-duration="4">
+        <div id="bar"></div>
+        <div id="text"><div id="title"></div><div id="subtitle"></div></div>
+      </section>
+    </div>
+    <script>
+      const d = Object.assign({ title: "Seu nome", subtitle: "", accent: "#FF4500" }, window.AE_DATA || {});
+      document.getElementById("title").textContent = d.title;
+      document.getElementById("subtitle").textContent = d.subtitle;
+      if (!d.subtitle) document.getElementById("subtitle").remove();
+      document.documentElement.style.setProperty("--accent", d.accent);
+
+      const total = parseFloat(document.getElementById("root").dataset.duration);
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo("#bar", { scaleY: 0 }, { scaleY: 1, duration: 0.3, ease: "power2.out" }, 0)
+        .fromTo("#text", { clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)", duration: 0.5, ease: "power3.out" }, 0.15)
+        .fromTo(["#title", "#subtitle"], { x: -30, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, stagger: 0.1 }, 0.3)
+        .to("#card", { x: -60, opacity: 0, duration: 0.4, ease: "power2.in" }, Math.max(0.9, total - 0.45));
+      window.__timelines = window.__timelines || {};
+      window.__timelines.main = tl;
+    </script>
+  </body>
+</html>

@@ -76,6 +76,7 @@ bash ~/.auto-edit-video/uninstall.sh
 ### Dependência opcional
 
 - **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** — `npm install -g @anthropic-ai/claude-code` (necessário para stages de IA)
+- **[Node.js 22+](https://nodejs.org)** — para os overlays animados e `--caption-engine hyperframes` (renderizados localmente com [HyperFrames](https://github.com/heygen-com/hyperframes) via `npx`)
 
 ### Desenvolvimento (Nix)
 
@@ -285,7 +286,14 @@ auto-edit short video.mp4 \
   --highlight-color "&H0045FF&"  # cor ASS (BBGGRR) — padrão: laranja
   --highlight-border 2.5         # espessura do destaque
   --font-size 14                 # tamanho da fonte
+  --caption-engine hyperframes   # legendas animadas (Chrome headless); padrão: ass
 ```
+
+`--caption-engine hyperframes` renderiza `hyperframes/captions/` na máquina (~3 min a cada 30s de vídeo). Se o render falhar, cai automaticamente no ASS.
+
+### Overlays animados (long)
+
+Além dos MP4s com tela verde em `assets/overlays/`, o agente de overlay pode usar templates HTML de `hyperframes/overlays/` — `lower_third`, `cta`, `highlight` — escrevendo só o texto. O render é local (Chrome headless + FFmpeg), sai com canal alpha (sem chroma key) e fica em cache em `workspace/<video>/hf_cache/`. Sem Node, o overlay é pulado com aviso (ou falha com `AUTO_EDIT_OVERLAYS_STRICT=1`).
 
 ### LLM Backend
 

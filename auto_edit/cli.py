@@ -174,6 +174,13 @@ def _ralph_env(primary: str, fb: Optional[str], language: Optional[str] = None) 
     return env
 
 
+def _caption_engine(value: str) -> str:
+    if value not in ("ass", "hyperframes"):
+        console.print("[red]Invalid --caption-engine.[/red] Choose from: ass, hyperframes")
+        raise typer.Exit(1)
+    return value
+
+
 def _resolve_plan(plan_id: Optional[str], no_prompt: bool, resume_from: Optional[str]) -> Optional[str]:
     """Convert raw --plan-id flag to canonical id, or interactively pick one."""
     if resume_from:
@@ -299,6 +306,7 @@ def short(
     ),
     highlight_border: float = typer.Option(2.5, "--highlight-border", help="Highlight word border thickness (default 2.5)"),
     highlight_color: str = typer.Option("&H0045FF&", "--highlight-color", help="Highlight color in ASS format &HBBGGRR& (default orange)"),
+    caption_engine: str = typer.Option("ass", "--caption-engine", help="ass (fast, default) or hyperframes (animated, rendered locally with Node; ~3 min per 30s)"),
     font_size: int = typer.Option(14, "--font-size", help="Caption font size (default 14)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Run only through review stage — shows cut plan without executing FFmpeg."),
     language: str = typer.Option("pt", "--language", "-l", help="Audio language (pt, en, es, etc.)"),
@@ -314,6 +322,7 @@ def short(
     caption_style = {
         "border_highlight": highlight_border,
         "color_highlight": highlight_color,
+        "engine": _caption_engine(caption_engine),
         "font_size": font_size,
     }
     pid = _resolve_plan(plan_id, no_plan_prompt, resume_from)
@@ -597,6 +606,7 @@ def merge(
     ),
     highlight_border: float = typer.Option(2.5, "--highlight-border"),
     highlight_color: str = typer.Option("&H0045FF&", "--highlight-color"),
+    caption_engine: str = typer.Option("ass", "--caption-engine", help="ass or hyperframes"),
     font_size: int = typer.Option(14, "--font-size"),
     language: str = typer.Option("pt", "--language", "-l", help="Audio language (pt, en, es, etc.)"),
     plan_id: Optional[str] = typer.Option(None, "--plan-id", help="Link merged video to a plan slot (e.g. 'S2' or '2026-W19/S2')."),
@@ -706,6 +716,7 @@ def merge(
     caption_style = {
         "border_highlight": highlight_border,
         "color_highlight": highlight_color,
+        "engine": _caption_engine(caption_engine),
         "font_size": font_size,
     } if video_type == "short" else None
 
@@ -1026,6 +1037,14 @@ def doctor() -> None:
             " ; ".join(str(d) for d in ov_dirs),
             "[yellow]WARN[/yellow] no .mp4 found (set AUTO_EDIT_ASSETS_OVERLAYS)",
         ))
+
+    # Node (optional: HyperFrames overlay templates and --caption-engine hyperframes)
+    npx_path = shutil.which("npx")
+    checks.append((
+        "npx (hyperframes)",
+        npx_path or "NOT FOUND",
+        "[green]OK[/green]" if npx_path else "[yellow]WARN[/yellow] install Node.js 22+ for animated overlays/captions",
+    ))
 
     # LLM CLI
     for cli_name in ("claude", "cursor"):

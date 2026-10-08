@@ -848,6 +848,7 @@ class JobManager:
         overlays_dir: str | None = None,
         caption_style: dict | None = None,
         cold_open: bool = False,
+        reorder: bool = False,
     ) -> Job:
         video = Path(video_path).resolve()
         if not video.exists():
@@ -863,6 +864,8 @@ class JobManager:
         )
         if cold_open:
             pl.set_cold_open(ws)
+        if reorder:
+            pl.set_reorder(ws)
         return self._spawn(
             ws.name,
             "edit",

@@ -119,7 +119,13 @@ python -m venv .venv
 - **Node.js 22+**: `winget install OpenJS.NodeJS.LTS`
 - **Claude Code**: `npm install -g @anthropic-ai/claude-code`
 
-Rode com `.venv\Scripts\auto-edit ...` (ou ative o venv com `.venv\Scripts\activate` e use `auto-edit ...`).
+No Windows, rode pelo Python do venv. Nos exemplos abaixo, troque `auto-edit` por:
+
+```powershell
+.venv\Scripts\python.exe -m auto_edit short video.mp4 --context "..."
+```
+
+> **Atenção (antivírus):** evite rodar o lançador `.venv\Scripts\auto-edit.exe` com o **Norton 360** ativo. Numa máquina de teste, executar esse `.exe` recém-criado (sem assinatura digital) coincidiu com telas azuis `0x50 PAGE_FAULT_IN_NONPAGED_AREA` todas as vezes, enquanto `python.exe -m auto_edit` (mesmo código) funcionou normalmente. Se quiser usar o `.exe`, adicione a pasta do projeto às exclusões do antivírus.
 
 > O repositório tem ~250 MB por causa do código do HyperFrames em `vendor/`. Para um clone mais leve: `git clone --depth 1 ...`.
 
@@ -173,6 +179,23 @@ auto-edit short upload/meu-video.mp4 \
 ```
 
 Sem `--caption-engine hyperframes`, as legendas usam o motor ASS original (rápido). Se o render HyperFrames falhar por qualquer motivo, o stage cai automaticamente no ASS.
+
+### Short com motion graphics explicativos (`--graphics`)
+
+```bash
+auto-edit short upload/meu-video.mp4 \
+  --context "Explicando juros do cartão, tom casual" \
+  --caption-engine hyperframes \
+  --graphics
+```
+
+Por padrão os shorts não têm overlays. Com `--graphics`, o agente lê a fala e coloca **passos, números, antes × depois, código ou gráficos** no topo do vídeo enquanto você explica — sem cobrir as legendas. Nos shorts só entram esses 5 templates explicativos (lower third, CTA e MP4s com tela verde ficam de fora), no máximo um a cada ~20 s. Custa uma chamada a mais ao Claude (só o JSON com os dados) e alguns renders locais.
+
+Para ligar num short que já foi editado, sem refazer cortes nem transcrição:
+
+```bash
+auto-edit resume upload/meu-video.mp4 --from execute --graphics
+```
 
 ### Refazer só os overlays (sem IA)
 

@@ -143,6 +143,19 @@ CHROMA_BLEND = "0.05"
 DEFAULT_TEMPLATE_DURATION = 4.0
 # HyperFrames renders carry an alpha channel; green-screen MP4s need chromakey.
 ALPHA_SUFFIXES = (".mov", ".webm")
+# Shorts (vertical, captions at the bottom) only take the explainer templates:
+# they sit at the top. lower_third/cta sit at the bottom under the captions, and
+# 16:9 green-screen MP4s would be letterboxed with opaque black bars.
+SHORT_TEMPLATES = {"steps", "stat", "compare", "code", "chart"}
+
+
+def _filter_for_short(overlays: list[dict], video_type: str) -> tuple[list[dict], list[str]]:
+    """Return (overlays allowed for this video type, names of the dropped ones)."""
+    if video_type != "short":
+        return overlays, []
+    kept = [ov for ov in overlays if ov.get("template") in SHORT_TEMPLATES]
+    dropped = [ov.get("file") or f"template:{ov.get('template')}" for ov in overlays if ov not in kept]
+    return kept, dropped
 
 
 def overlay(workspace: Path) -> None:
@@ -156,7 +169,10 @@ def overlay(workspace: Path) -> None:
     search_dirs = _overlay_search_dirs()
     print(f"[overlayer] Overlay search dirs: {', '.join(str(d) for d in search_dirs)}")
 
-    pipeline = json.loads((workspace / "pipeline.json").read_text())
+    pipeline = json.loads((workspace / "pipeline.json").read_text(encoding="utf-8"))
+    overlays, dropped = _filter_for_short(overlays, pipeline.get("type", "long"))
+    for name in dropped:
+        print(f"[overlayer] WARNING: {name} is not used in shorts — skipped (only {', '.join(sorted(SHORT_TEMPLATES))}).")
     reviewed_plan = json.loads((workspace / "reviewed_plan.json").read_text())
     kept = _build_kept_intervals(reviewed_plan, pipeline)
 

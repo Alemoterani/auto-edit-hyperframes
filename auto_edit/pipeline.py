@@ -94,6 +94,19 @@ def set_cold_open(workspace: Path, enabled: bool = True) -> None:
     save(workspace, p)
 
 
+def set_graphics(workspace: Path, enabled: bool = True) -> None:
+    """Shorts: run the overlay stage with the explainer templates (kept across `resume`).
+
+    Shorts skip `overlay` by default; this flips it back to pending. Longs always
+    run it, so for them the flag only records the choice.
+    """
+    p = load(workspace)
+    p["graphics"] = bool(enabled)
+    if enabled and p.get("type") == "short" and p["stages"].get("overlay", {}).get("status") == "skip":
+        p["stages"]["overlay"] = {"status": "pending"}
+    save(workspace, p)
+
+
 def set_stage_status(workspace: Path, stage: str, status: str, error: str | None = None) -> dict:
     """Mark a stage as running/complete/failed and update current_stage."""
     pipeline = load(workspace)

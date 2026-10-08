@@ -34,6 +34,10 @@ Pacing: at most one explainer every ~30s, and never two overlays on screen at on
 
 Optional `"accent": "#RRGGBB"` in `vars` changes the color.
 
+### Shorts (Type: short)
+
+Shorts are vertical and have captions at the bottom. Use **only** the explainer templates (`steps`, `stat`, `compare`, `code`, `chart`) — no `file` entries, no `lower_third`, `cta` or `highlight` (anything else is dropped). Shorts are fast: at most one explainer every ~20s, and only where it genuinely helps the viewer understand. Returning `{"overlays": []}` is fine when nothing fits.
+
 ## Rules
 
 - Use **original** video timestamps (before cuts); the tool remaps to the edited timeline.

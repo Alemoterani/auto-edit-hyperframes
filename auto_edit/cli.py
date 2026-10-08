@@ -212,6 +212,7 @@ def _run_pipeline(
     plan_id: Optional[str] = None,
     cold_open: bool = False,
     reorder: bool = False,
+    graphics: bool = False,
 ) -> None:
     if not video.exists():
         console.print(f"[red]Error:[/red] File not found: {video}")
@@ -240,12 +241,16 @@ def _run_pipeline(
 
     if cold_open:
         pl.set_cold_open(ws)
+    if graphics:
+        pl.set_graphics(ws)
     if reorder:
         pl.set_reorder(ws)
     console.print(f"[cyan]Type:[/cyan] {video_type}")
     console.print(f"[cyan]Context:[/cyan] {context or '(none)'}")
     if pl.load(ws).get("cold_open"):
         console.print("[cyan]Cold open:[/cyan] sim (o melhor momento abre o vídeo)")
+    if pl.load(ws).get("graphics"):
+        console.print("[cyan]Gráficos:[/cyan] sim (motion graphics explicativos via HyperFrames)")
     if pl.load(ws).get("reorder"):
         console.print("[cyan]Reordenação:[/cyan] sim (o agente pode mudar a ordem dos blocos)")
     console.print(f"[cyan]Whisper model:[/cyan] {whisper_model}")
@@ -314,6 +319,7 @@ def short(
     no_plan_prompt: bool = typer.Option(False, "--no-plan-prompt", help="Don't prompt for a plan slot when --plan-id is omitted."),
     cold_open: bool = typer.Option(False, "--cold-open", help="Abre o vídeo com o melhor momento (teaser) antes da abertura normal."),
     reorder: bool = typer.Option(False, "--reorder", help="Deixa o agente mudar a ordem dos blocos (ex.: demo antes da explicação)."),
+    graphics: bool = typer.Option(False, "--graphics", help="Short: adiciona motion graphics explicativos (passos, números, antes × depois, código, gráfico) renderizados com HyperFrames."),
 ) -> None:
     """Edit a short-form video (adds captions, generates Reels/Shorts metadata)."""
     if whisper_model not in VALID_MODELS:
@@ -341,6 +347,7 @@ def short(
         plan_id=pid,
         cold_open=cold_open,
         reorder=reorder,
+        graphics=graphics,
     )
 
 
@@ -943,6 +950,7 @@ def sync_overlays() -> None:
 def resume(
     video: Path = typer.Argument(..., help="Path to the original video file"),
     from_stage: str = typer.Option(..., "--from", help=f"Stage to resume from: {', '.join(pl.STAGES[:-1])}"),
+    graphics: bool = typer.Option(False, "--graphics", help="Short: liga os motion graphics explicativos neste workspace (ex.: resume --from execute --graphics)."),
     whisper_model: Optional[str] = typer.Option(None, "--whisper-model", "-m", help=f"Override Whisper model: {', '.join(VALID_MODELS)}"),
     cli: Optional[str] = typer.Option(
         None,
@@ -983,6 +991,7 @@ def resume(
         cli=cli,
         cli_fallback=cli_fallback,
         language=p.get("language", "pt"),
+        graphics=graphics,
     )
 
 

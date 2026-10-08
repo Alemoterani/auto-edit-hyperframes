@@ -20,6 +20,17 @@ from pathlib import Path
 from auto_edit import overlay_assets
 
 TEMPLATES_DIR = overlay_assets.default_repo_root() / "hyperframes"
+VENDOR_CLI_PACKAGE = overlay_assets.default_repo_root() / "vendor" / "hyperframes" / "packages" / "cli" / "package.json"
+
+
+def package_spec() -> str:
+    """`hyperframes@<version>` pinned to the source in vendor/hyperframes, so the
+    renderer always matches the bundled code; plain `hyperframes` if it's absent."""
+    try:
+        version = json.loads(VENDOR_CLI_PACKAGE.read_text(encoding="utf-8"))["version"]
+    except (OSError, ValueError, KeyError):
+        return "hyperframes"
+    return f"hyperframes@{version}"
 
 
 def npx() -> str | None:
@@ -78,7 +89,7 @@ def render(
         shutil.copytree(src, project)
         (project / "index.html").write_text(html, encoding="utf-8")
         (project / "data.js").write_text(data_js, encoding="utf-8")
-        cmd = [npx_bin, "-y", "hyperframes", "render", str(project),
+        cmd = [npx_bin, "-y", package_spec(), "render", str(project),
                "--format", "mov", "--quiet", "-o", str(output)]
         if fps:
             cmd += ["--fps", fps]

@@ -36,6 +36,9 @@
             cp -r auto_edit tools agents hyperframes $out/share/auto-edit-video/
             cp pyproject.toml ralph.sh LICENSE $out/share/auto-edit-video/
             chmod +x $out/share/auto-edit-video/ralph.sh
+            # Only the version file of vendor/hyperframes is needed at runtime (npx pin)
+            mkdir -p $out/share/auto-edit-video/vendor/hyperframes/packages/cli
+            cp vendor/hyperframes/packages/cli/package.json $out/share/auto-edit-video/vendor/hyperframes/packages/cli/
             # assets/ is optional (fonts, overlays, sounds)
             if [ -d assets ]; then
               cp -r assets $out/share/auto-edit-video/
@@ -63,10 +66,10 @@
         };
       in
       {
-        # nix profile install github:gabuldev/auto-edit-video
+        # nix profile install github:Alemoterani/auto-edit-hyperframes
         packages.default = auto-edit-pkg;
 
-        # nix run github:gabuldev/auto-edit-video -- short video.mp4 --context "..."
+        # nix run github:Alemoterani/auto-edit-hyperframes -- short video.mp4 --context "..."
         apps.default = {
           type = "app";
           program = "${auto-edit-pkg}/bin/auto-edit";

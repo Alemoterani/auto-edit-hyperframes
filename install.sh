@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# auto-edit-video installer
-# Usage: curl -sSL https://raw.githubusercontent.com/gabuldev/auto-edit-video/main/install.sh | bash
+# auto-edit-hyperframes installer
+# Usage: curl -sSL https://raw.githubusercontent.com/Alemoterani/auto-edit-hyperframes/main/install.sh | bash
 set -euo pipefail
 
-INSTALL_DIR="${AUTO_EDIT_HOME:-$HOME/.auto-edit-video}"
+INSTALL_DIR="${AUTO_EDIT_HOME:-$HOME/.auto-edit-hyperframes}"
 BIN_DIR="$HOME/.local/bin"
-REPO_URL="https://github.com/gabuldev/auto-edit-video.git"
+REPO_URL="https://github.com/Alemoterani/auto-edit-hyperframes.git"
 MIN_PYTHON_MAJOR=3
 MIN_PYTHON_MINOR=11
 
@@ -20,7 +20,7 @@ warn()  { echo "  $(yellow "!!") $*"; }
 fail()  { echo "  $(red "ERROR") $*"; exit 1; }
 
 echo ""
-echo "  $(bold "auto-edit-video installer")"
+echo "  $(bold "auto-edit-hyperframes installer")"
 echo "  ────────────────────────"
 echo ""
 
@@ -134,8 +134,8 @@ mkdir -p "$BIN_DIR"
 
 cat > "$BIN_DIR/auto-edit" << 'WRAPPER'
 #!/usr/bin/env bash
-export AUTO_EDIT_REPO_ROOT="$HOME/.auto-edit-video"
-exec "$HOME/.auto-edit-video/.venv/bin/auto-edit" "$@"
+export AUTO_EDIT_REPO_ROOT="$HOME/.auto-edit-hyperframes"
+exec "$HOME/.auto-edit-hyperframes/.venv/bin/auto-edit" "$@"
 WRAPPER
 chmod +x "$BIN_DIR/auto-edit"
 info "Wrapper installed at $BIN_DIR/auto-edit"

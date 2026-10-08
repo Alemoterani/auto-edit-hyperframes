@@ -1,136 +1,238 @@
-# Auto Edit Video
+# Auto Edit + HyperFrames
 
-Pipeline de edição automatizada de vídeo usando IA. Transcreve, planeja cortes, executa, adiciona legendas e gera metadata — tudo via CLI, sem intervenção manual.
+**Edição de vídeo automatizada com IA + gráficos animados renderizados na sua máquina.**
+
+Este repositório junta dois projetos em uma versão só:
+
+- **[auto-edit-video](https://github.com/gabuldev/auto-edit-video)**: pipeline que pega um vídeo bruto, transcreve, decide os cortes com IA (Claude), corta com FFmpeg, adiciona legendas/overlays e gera título, descrição e hashtags. Tudo pela linha de comando.
+- **[HyperFrames](https://github.com/heygen-com/hyperframes)** (HeyGen): framework que transforma HTML + CSS + animações em vídeo, renderizando quadro a quadro num Chrome headless.
+
+O resultado: **lower thirds, CTAs, cards de destaque e legendas animadas** feitos com HTML de verdade, com o texto tirado do próprio vídeo, em vez de MP4s fixos com tela verde.
+
+## Por que juntar os dois
+
+O trabalho pesado vai para **o seu computador**, não para a IA:
+
+| Quem faz | O quê |
+|---|---|
+| **IA (Claude)** | Só decide *o que* mostrar e *quando*. Devolve um JSON pequeno, ex.: `{"template": "cta", "vars": {"text": "Se inscreve no canal"}, "original_start": 245.8}` |
+| **Sua máquina** | Transcrição (Whisper), cortes (FFmpeg), render das animações (Chrome headless + FFmpeg), composição final |
+
+Os templates HTML são escritos **uma vez** e reaproveitados em todo vídeo. Por isso o custo em tokens fica praticamente igual ao do auto-edit original, enquanto o visual melhora bastante:
+
+- **Texto real do vídeo** no gráfico (nome, dica, termo explicado), não um MP4 genérico
+- **Canal alpha de verdade** (ProRes 4444): sem chroma key, sem borda verde, sem serrilhado
+- **Resolução exata** do vídeo editado (inclusive depois de um upscale via `video_filter`)
+- **Cache**: o mesmo overlay com o mesmo texto não é renderizado duas vezes
 
 ## Como funciona
 
-O pipeline é uma state machine de 9 stages orquestrada por agentes LLM (Claude) e ferramentas FFmpeg:
+O pipeline é uma state machine orquestrada por agentes LLM e ferramentas locais:
 
 ```
 extract → plan → review → execute → overlay → caption → evaluate → metadata → done
   │         │       │        │         │          │          │          │
-Whisper   Claude  Claude   FFmpeg   FFmpeg     FFmpeg    Claude     Claude
-+ Claude                                      + ASS
+Whisper   Claude  Claude   FFmpeg   Claude +    FFmpeg/    Claude     Claude
++ Claude                           HyperFrames  HyperFrames
 ```
 
-| Stage | O que faz | Tipo |
-|-------|-----------|------|
-| **extract** | Transcreve o áudio (Whisper `small`) + mapa de energia + correção com Claude | Python |
-| **plan** | Analisa transcrição e planeja os cortes (silêncios, false starts, filler) | LLM Agent |
-| **review** | QA do plano de cortes (valida, adiciona cortes faltando, merge) | LLM Agent |
-| **execute** | Aplica os cortes no vídeo via FFmpeg com normalização de áudio | Python |
-| **overlay** | Compõe overlays gráficos com chroma key (apenas long-form) | LLM + Python |
-| **caption** | Gera legendas estilo CapCut com destaque por palavra (apenas shorts) | Python |
-| **evaluate** | Avalia qualidade do resultado; rejeita e volta ao plan se necessário | LLM Agent |
-| **metadata** | Gera título, descrição e hashtags para publicação | LLM Agent |
+| Stage | O que faz | Onde roda |
+|-------|-----------|-----------|
+| **extract** | Transcreve o áudio (Whisper) + mapa de energia + correção da transcrição | Máquina + Claude |
+| **plan** | Planeja os cortes (silêncios, falsos começos, vícios de linguagem) | Claude |
+| **review** | Revisa o plano de cortes | Claude |
+| **execute** | Aplica os cortes e normaliza o áudio | Máquina (FFmpeg) |
+| **overlay** | Claude escolhe overlays e escreve os textos; os templates HyperFrames são renderizados e compostos (só long) | Claude + **Máquina (HyperFrames)** |
+| **caption** | Legendas estilo CapCut com destaque palavra a palavra (só shorts), via ASS ou **HyperFrames** | Máquina |
+| **evaluate** | Avalia o resultado; se rejeitar, volta ao `plan` (até 3 vezes) | Claude |
+| **metadata** | Título, descrição e hashtags | Claude |
 
-Se o avaliador rejeitar, o pipeline volta ao `plan` com feedback — até 3 iterações.
+### Onde o HyperFrames entra
+
+```
+overlay_plan.json (Claude)                      hyperframes/overlays/<template>/index.html
+  {"template": "lower_third",                              │
+   "vars": {"title": "...", ...},   ──► data.js ──► npx hyperframes render --format mov
+   "original_start": 12.4}                                 │
+                                                    hf_cache/<template>-<hash>.mov  (alpha)
+                                                           │
+edited_video.mp4 ──────────────────────► FFmpeg overlay (no tempo certo) ──► overlaid_video.mp4
+```
+
+1. O agente de overlay devolve, para cada momento, um `template` + textos curtos em `vars`.
+2. `auto_edit/hyperframes.py` copia o template, grava os dados em `data.js`, ajusta tamanho e duração da composição para os do vídeo e roda `npx hyperframes@<versão do vendor> render --format mov`.
+3. O `.mov` sai com transparência e é sobreposto pelo FFmpeg exatamente no instante planejado (o tempo é remapeado do vídeo original para o vídeo já cortado).
+
+Nas legendas o fluxo é o mesmo, só que o template `hyperframes/captions/` recebe a lista de palavras com seus tempos e gera uma camada do tamanho do vídeo inteiro.
+
+## O que tem neste repositório
+
+```
+auto-edit-hyperframes/
+├── auto_edit/                 # Core do auto-edit (CLI, pipeline, runner, workspaces)
+│   └── hyperframes.py         # Ponte com o HyperFrames: copia template, injeta dados, renderiza, cacheia
+├── agents/                    # Prompts dos agentes (overlayer.md conhece os templates)
+├── tools/                     # Stages em Python (extract, executor, overlayer, captioner…)
+├── hyperframes/               # Templates HTML usados pelo pipeline
+│   ├── overlays/
+│   │   ├── lower_third/       # Nome + subtítulo entrando pela esquerda
+│   │   ├── cta/               # Botão "Se inscreve" com sininho
+│   │   └── highlight/         # Card com dica/termo/comando no canto
+│   └── captions/              # Legendas animadas palavra a palavra
+├── vendor/
+│   └── hyperframes/           # Código-fonte completo do HyperFrames (snapshot, Apache 2.0)
+├── tests/                     # pytest
+└── ralph.sh                   # Loop que orquestra os stages
+```
+
+O código do HyperFrames fica em [`vendor/hyperframes/`](vendor/) para referência, estudo e para **fixar a versão**: o auto-edit lê a versão em `vendor/hyperframes/packages/cli/package.json` e sempre executa `npx hyperframes@<essa versão>`. Assim o que roda é exatamente o código que está no repositório. Veja [`vendor/README.md`](vendor/README.md) para atualizar.
+
+## Requisitos
+
+| Dependência | Para quê | Obrigatória? |
+|---|---|---|
+| Python 3.11+ | Pipeline | Sim |
+| FFmpeg **com libass** | Cortes, composição, legendas ASS | Sim |
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`claude`) | Stages de IA (plan, review, overlay, evaluate, metadata) | Sim, para editar com IA |
+| [Node.js 22+](https://nodejs.org) | Renderizar os templates HyperFrames (`npx`) | Para overlays/legendas animadas |
+| Internet | O primeiro `npx` baixa o HyperFrames; os templates carregam GSAP e a fonte Montserrat por CDN | Para overlays/legendas animadas |
+
+Sem Node, o pipeline continua funcionando: overlays de template são pulados com aviso e as legendas usam o ASS.
 
 ## Instalação
 
-### Opção 1 — Nix (recomendada, zero dependências manuais)
+### Windows
 
-Nix instala Python, FFmpeg e todas as deps automaticamente. Nada precisa estar pré-instalado.
-
-```bash
-# Instalar Nix (uma vez, se ainda não tiver)
-curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
-
-# Instalar auto-edit (com tudo incluso)
-nix profile install github:gabuldev/auto-edit-video
+```powershell
+git clone https://github.com/Alemoterani/auto-edit-hyperframes.git
+cd auto-edit-hyperframes
+python -m venv .venv
+.venv\Scripts\pip install -e ".[test]"
 ```
 
-Na primeira execução, o auto-edit cria um venv e instala as deps Python (~2 GB com PyTorch). Depois disso, executa instantaneamente.
+- **FFmpeg com libass**: use o build "full" do [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) (`winget install Gyan.FFmpeg`) e confira que `ffmpeg` está no PATH.
+- **Node.js 22+**: `winget install OpenJS.NodeJS.LTS`
+- **Claude Code**: `npm install -g @anthropic-ai/claude-code`
 
-Ou rode sem instalar:
+Rode com `.venv\Scripts\auto-edit ...` (ou ative o venv com `.venv\Scripts\activate` e use `auto-edit ...`).
 
-```bash
-nix run github:gabuldev/auto-edit-video -- short video.mp4 --context "..."
-```
+> O repositório tem ~250 MB por causa do código do HyperFrames em `vendor/`. Para um clone mais leve: `git clone --depth 1 ...`.
 
-### Opção 2 — curl | bash (instala deps do sistema automaticamente)
-
-```bash
-curl -sSL https://raw.githubusercontent.com/gabuldev/auto-edit-video/main/install.sh | bash
-```
-
-O script detecta e instala automaticamente o que falta (Python, FFmpeg, git) via Homebrew (macOS), apt, dnf ou pacman (Linux). Instala o `auto-edit` em `~/.auto-edit-video/`.
-
-### Pós-instalação
+### macOS / Linux: curl | bash
 
 ```bash
-auto-edit doctor    # valida o setup
-auto-edit update    # atualiza para última versão
+curl -sSL https://raw.githubusercontent.com/Alemoterani/auto-edit-hyperframes/main/install.sh | bash
 ```
 
-Para desinstalar:
+Detecta e instala o que falta (Python, FFmpeg, git) via Homebrew, apt, dnf ou pacman e instala em `~/.auto-edit-hyperframes/`. Instale o Node.js 22+ à parte para os overlays animados.
+
+### macOS / Linux: Nix
 
 ```bash
-# Nix
-nix profile remove auto-edit-video
-
-# curl | bash
-bash ~/.auto-edit-video/uninstall.sh
+nix profile install github:Alemoterani/auto-edit-hyperframes
+# ou, sem instalar:
+nix run github:Alemoterani/auto-edit-hyperframes -- short video.mp4 --context "..."
 ```
 
-### Dependência opcional
+Na primeira execução o auto-edit cria um venv e instala as dependências Python (~2 GB com PyTorch/Whisper).
 
-- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** — `npm install -g @anthropic-ai/claude-code` (necessário para stages de IA)
-- **[Node.js 22+](https://nodejs.org)** — para os overlays animados e `--caption-engine hyperframes` (renderizados localmente com [HyperFrames](https://github.com/heygen-com/hyperframes) via `npx`)
+> O comando continua se chamando `auto-edit`. Se você também tem o auto-edit-video original instalado, deixe só um deles no PATH.
 
-### Desenvolvimento (Nix)
-
-Para contribuidores:
+### Conferir o setup
 
 ```bash
-git clone https://github.com/gabuldev/auto-edit-video.git
-cd auto-edit-video
-nix develop  # ou: make setup
+auto-edit doctor
 ```
+
+Mostra Python, FFmpeg, pacotes, agentes, overlays, **npx (hyperframes)** e o CLI de LLM. A primeira renderização baixa o HyperFrames via `npx` (uma vez só).
+
+Desinstalar: `bash ~/.auto-edit-hyperframes/uninstall.sh` (curl | bash) ou `nix profile remove auto-edit-video` (Nix).
 
 ## Uso
 
-### Editar um short (vertical, com legendas)
+### Long (horizontal) com overlays animados
+
+```bash
+auto-edit long upload/meu-video.mp4 \
+  --context "Tutorial de Python para iniciantes, tom didático"
+```
+
+O agente de overlay lê a transcrição e decide onde colocar cada template. Você só precisa dar um bom `--context`: ele é usado para os cortes **e** para escrever os textos dos gráficos.
+
+### Short (vertical) com legendas animadas
 
 ```bash
 auto-edit short upload/meu-video.mp4 \
   --context "Review de produto tech, tom casual" \
-  --whisper-model small
+  --caption-engine hyperframes
 ```
 
-### Editar long-form (horizontal, com overlays, sem legendas)
+Sem `--caption-engine hyperframes`, as legendas usam o motor ASS original (rápido). Se o render HyperFrames falhar por qualquer motivo, o stage cai automaticamente no ASS.
+
+### Refazer só os overlays (sem IA)
+
+Editou o `workspace/<video>/overlay_plan.json` na mão (trocou um texto, mudou um tempo)? Recomponha sem chamar o Claude:
 
 ```bash
-auto-edit long upload/meu-video.mp4 \
-  --context "Tutorial de programação em Python"
+auto-edit apply-overlays upload/meu-video.mp4
 ```
 
-### Batch (processar vários vídeos)
+### Outros comandos
 
 ```bash
-auto-edit batch upload/pasta-de-videos/ --type short \
-  --context "Vlogs de viagem, energia alta"
+auto-edit batch upload/pasta/ --type short --context "..."              # vários vídeos
+auto-edit merge upload/clips/ --name final --type long --context "..."  # concatena + edita
+auto-edit resume upload/meu-video.mp4 --from overlay                    # retoma de um stage
+auto-edit status upload/meu-video.mp4                                   # estado do pipeline
 ```
 
-### Merge (concatenar + editar)
+## Templates disponíveis
 
-```bash
-auto-edit merge upload/clips/ --name video-final --type long \
-  --context "Compilação de dicas de produtividade"
+| Template | `vars` | Quando o agente usa | Duração |
+|---|---|---|---|
+| `lower_third` | `title`, `subtitle` | Quem fala se apresenta; convidado, ferramenta ou produto citado pela primeira vez | 4 s |
+| `cta` | `text` | Pedido de inscrição/seguir/curtir | 3–4 s |
+| `highlight` | `label`, `text` | Termo, número, comando ou lição-chave sendo explicada (no máx. 1 a cada ~45 s) | 4–6 s |
+
+Todos aceitam `"accent": "#RRGGBB"` em `vars` para mudar a cor. Exemplo de `overlay_plan.json`:
+
+```json
+{
+  "overlays": [
+    {"template": "lower_third", "vars": {"title": "Ana Souza", "subtitle": "Dev Python"}, "original_start": 4.1, "duration": 4},
+    {"template": "highlight", "vars": {"label": "Dica", "text": "Rode os testes antes do commit"}, "original_start": 120.4, "duration": 5},
+    {"template": "cta", "vars": {"text": "Se inscreve no canal"}, "original_start": 245.8, "duration": 4}
+  ]
+}
 ```
 
-### Retomar de um stage específico
+Os MP4s com tela verde antigos (`assets/overlays/ctas.mp4` etc.) continuam funcionando com `"file": "ctas.mp4"`.
 
-```bash
-auto-edit resume upload/meu-video.mp4 --from plan
-auto-edit resume upload/meu-video.mp4 --from extract --whisper-model medium
-```
+### Criar ou mudar um template
 
-### Ver status do pipeline
+Um template é uma pasta em `hyperframes/overlays/<nome>/` com um `index.html`. O contrato é pequeno:
 
-```bash
-auto-edit status upload/meu-video.mp4
-```
+1. **Raiz da composição**: `<div id="root" data-composition-id="main" data-start="0" data-duration="…" data-width="…" data-height="…">`. O auto-edit reescreve duração e tamanho a cada render; escreva qualquer valor razoável.
+2. **Dados**: carregue `<script src="data.js"></script>` e leia `window.AE_DATA`, com valores padrão para o template abrir sozinho no navegador.
+3. **Animação**: crie uma timeline GSAP pausada e registre em `window.__timelines.main`. O HyperFrames controla o tempo quadro a quadro.
+4. **Fundo transparente** (`background: transparent`) e tamanhos relativos (`%`, `vmin`) para funcionar em 16:9 e 9:16.
+
+Para pré-visualizar, abra o `index.html` no navegador (usa os valores padrão) ou rode `npx hyperframes preview hyperframes/overlays/<nome>`. Depois, descreva o novo template em [`agents/overlayer.md`](agents/overlayer.md) para o agente saber quando usá-lo. Use os templates existentes como modelo.
+
+Referência completa do formato: [`vendor/hyperframes/docs/reference/html-schema.mdx`](vendor/hyperframes/docs/reference/html-schema.mdx).
+
+## Desempenho
+
+O render é quadro a quadro num Chrome headless, então é mais lento que o FFmpeg puro. Medido num PC Windows comum:
+
+| O quê | Tempo |
+|---|---|
+| Um overlay de 3–4 s (primeira vez) | ~30 s |
+| O mesmo overlay de novo (cache) | instantâneo |
+| Legendas HyperFrames | ~3 min a cada 30 s de short |
+| Legendas ASS (padrão) | segundos |
+
+A camada de legendas em ProRes ocupa ~300 MB por minuto e é apagada logo depois da composição. O cache de overlays fica em `workspace/<video>/hf_cache/`.
 
 ## Planejamento de conteúdo (`auto-edit plan`)
 
@@ -283,103 +385,83 @@ O projeto também inclui slash commands para usar dentro do Claude Code (quando 
 
 ```bash
 auto-edit short video.mp4 \
-  --highlight-color "&H0045FF&"  # cor ASS (BBGGRR) — padrão: laranja
-  --highlight-border 2.5         # espessura do destaque
-  --font-size 14                 # tamanho da fonte
-  --caption-engine hyperframes   # legendas animadas (Chrome headless); padrão: ass
+  --caption-engine hyperframes   # ass (padrão, rápido) ou hyperframes (animado)
+  --highlight-color "&H0045FF&"  # cor de destaque (formato ASS BBGGRR), vale para os dois motores
+  --highlight-border 2.5         # espessura do destaque (ASS)
+  --font-size 14                 # tamanho da fonte (ASS)
 ```
 
-`--caption-engine hyperframes` renderiza `hyperframes/captions/` na máquina (~3 min a cada 30s de vídeo). Se o render falhar, cai automaticamente no ASS.
+### Variáveis de ambiente úteis
 
-### Overlays animados (long)
-
-Além dos MP4s com tela verde em `assets/overlays/`, o agente de overlay pode usar templates HTML de `hyperframes/overlays/` — `lower_third`, `cta`, `highlight` — escrevendo só o texto. O render é local (Chrome headless + FFmpeg), sai com canal alpha (sem chroma key) e fica em cache em `workspace/<video>/hf_cache/`. Sem Node, o overlay é pulado com aviso (ou falha com `AUTO_EDIT_OVERLAYS_STRICT=1`).
+| Variável | Efeito |
+|---|---|
+| `AUTO_EDIT_OVERLAYS_STRICT=1` | Falha o stage `overlay` se um overlay planejado não puder ser gerado (MP4 ausente ou render HyperFrames com erro), em vez de só avisar |
+| `AUTO_EDIT_ASSETS_OVERLAYS` | Pasta com seus MP4s de overlay com tela verde |
+| `AUTO_EDIT_FFMPEG` | FFmpeg específico (com libass) para as legendas ASS |
+| `AUTO_EDIT_LLM` / `AUTO_EDIT_LLM_FALLBACK` | CLI de LLM principal e reserva (`claude`, `cursor`…) |
+| `AUTO_EDIT_LLM_TIMEOUT` | Timeout das chamadas de LLM em segundos (padrão 600) |
 
 ### LLM Backend
 
 ```bash
-# Usar Claude (default)
-auto-edit short video.mp4
-
-# Usar Cursor Agent como fallback
-auto-edit short video.mp4 --cli claude --cli-fallback cursor
-
-# Via variáveis de ambiente
-export AUTO_EDIT_LLM=claude
-export AUTO_EDIT_LLM_FALLBACK=cursor
-export AUTO_EDIT_LLM_TIMEOUT=600  # timeout em segundos (default: 10min)
+auto-edit short video.mp4                                     # Claude (padrão)
+auto-edit short video.mp4 --cli claude --cli-fallback cursor  # com fallback
 ```
 
-## Arquitetura
-
-```
-auto-edit-video/
-├── auto_edit/              # Core do pipeline
-│   ├── cli.py              # CLI (Typer) — comandos de edição
-│   ├── pipeline.py         # State machine (9 stages)
-│   ├── plan.py             # Subcomando `plan` (planejamento de conteúdo)
-│   ├── config.py           # Paths de ~/.auto-edit/
-│   ├── runner.py           # Builder de prompts + invocação LLM
-│   └── workspace.py        # Gestão de workspaces
-├── agents/                 # Prompts dos agentes LLM (markdown)
-│   ├── planner.md          # Regras de planejamento de cortes
-│   ├── reviewer.md         # Regras de QA dos cortes
-│   ├── evaluator.md        # Regras de avaliação de qualidade
-│   ├── overlayer.md        # Regras de posicionamento de overlays
-│   ├── metadata.md         # Regras de geração de metadados
-│   └── plan_month.md       # Regras de planejamento mensal/semanal
-├── tools/                  # Ferramentas Python (FFmpeg/Whisper)
-│   ├── extract.py          # Transcrição + energia + correção IA
-│   ├── executor.py         # Cortes FFmpeg + loudnorm
-│   ├── captioner.py        # Legendas ASS + burn FFmpeg
-│   └── overlayer.py        # Composição de overlays + chroma key
-├── ralph.sh                # Loop engine (orquestra stages)
-├── tests/                  # Test suite (pytest)
-├── .claude/commands/       # Claude Code skills
-├── workspace/              # Workspaces por vídeo (auto-gerados)
-└── output/                 # Vídeos finalizados
-```
-
-### Fluxo de dados por stage
+## Fluxo de dados por stage
 
 ```
 upload/video.mp4
   → workspace/video/
-      transcription.json      ← extract (Whisper + energia + correção Claude)
-      cut_plan.json            ← plan (agente LLM)
-      reviewed_plan.json       ← review (agente LLM)
-      edited_video.mp4         ← execute (FFmpeg trim + concat + loudnorm)
-      overlaid_video.mp4       ← overlay (FFmpeg chroma key) [long only]
-      captions.ass             ← caption (ASS gerado)
-      captioned_video.mp4      ← caption (FFmpeg subtitles burn) [short only]
-      post_cut_transcription.json ← caption (timestamps remapeados)
-      assessment.json          ← evaluate (agente LLM)
-      metadata.json            ← metadata (agente LLM)
-  → output/video_final.mp4    ← done (cópia + cleanup)
-  → output/video.txt          ← done (título + descrição + hashtags)
+      transcription.json          ← extract
+      cut_plan.json               ← plan
+      reviewed_plan.json          ← review
+      edited_video.mp4            ← execute (cortes + loudnorm)
+      overlay_plan.json           ← overlay (agente: templates + textos)
+      hf_cache/*.mov              ← overlay/caption (renders HyperFrames com alpha)
+      overlaid_video.mp4          ← overlay [long]
+      captions.ass / captions.srt ← caption
+      captioned_video.mp4         ← caption [short]
+      post_cut_transcription.json ← caption (tempos remapeados)
+      assessment.json             ← evaluate
+      metadata.json               ← metadata
+  → output/video_final.mp4        ← done
+  → output/video.txt              ← done (título + descrição + hashtags)
 ```
 
 ## Funcionalidades técnicas
 
-- **Codec fallback**: `h264_videotoolbox` → `libx264` → `libx265` (cross-platform)
-- **Normalização de áudio**: EBU R128 (`loudnorm`) após cortes para volume consistente
-- **Validação de cut plans**: Verifica bounds antes do FFmpeg; rejeita intervalos sub-frame
-- **Correção de transcrição com IA**: Claude revisa output do Whisper (corrige alucinações, termos técnicos)
-- **Timestamps remapeados**: Captioner reutiliza transcrição original sem re-rodar Whisper
-- **Timeout em chamadas LLM**: Configurável via `AUTO_EDIT_LLM_TIMEOUT` (default: 600s)
-- **Persistência de erros**: Falhas salvas no `pipeline.json` com mensagem de erro
-- **Progresso em tempo real**: Output dos tools Python e FFmpeg visível durante execução
+- **Overlays com alpha**: renders HyperFrames entram sem chroma key; MP4s com tela verde continuam com chroma key
+- **Overlays no tempo certo**: cada overlay começa a tocar no instante em que aparece (antes, overlays depois de t=0 ficavam congelados no último quadro)
+- **Versão do HyperFrames fixada** pelo código em `vendor/hyperframes`
+- **Fallback seguro**: sem Node ou com erro de render, overlays são pulados com aviso e legendas voltam ao ASS
+- **Codec fallback**: `h264_videotoolbox` → `libx264` → `libx265`
+- **Normalização de áudio**: EBU R128 (`loudnorm`) após os cortes
+- **Correção de transcrição com IA** e **timestamps remapeados** sem re-rodar o Whisper
+- **Persistência de erros** no `pipeline.json` e **retomada** de qualquer stage
 
 ## Testes
 
 ```bash
 pip install -e ".[test]"
-python -m pytest tests/ -v
+python -m pytest tests/ -q
 ```
 
-## Licença
+Os testes do HyperFrames não abrem o Chrome (o render é simulado). Para testar de ponta a ponta, rode `auto-edit long` num vídeo curto.
 
-Este projeto é **source available** sob a
+## Créditos e licenças
+
+Este repositório combina dois projetos com licenças diferentes. Ao redistribuir, mantenha as duas.
+
+### HyperFrames: Apache 2.0
+
+Copyright HeyGen. Código em [`vendor/hyperframes/`](vendor/hyperframes/), licença em [`vendor/hyperframes/LICENSE`](vendor/hyperframes/LICENSE). O snapshot não foi modificado, exceto pela remoção das fixtures de teste em Git LFS e das regras de LFS do `.gitattributes` (ver [`vendor/README.md`](vendor/README.md)).
+
+### auto-edit-video: PolyForm Noncommercial 1.0.0
+
+Required Notice: Copyright (c) 2026 Gabriel Sampaio (gabuldev) <contato@gabul.dev>
+
+O código do auto-edit (tudo fora de `vendor/`) é **source available** sob a
 [PolyForm Noncommercial License 1.0.0](LICENSE) — não é uma licença open source
 no sentido da OSI, porque restringe o uso comercial.
 
@@ -393,9 +475,9 @@ no sentido da OSI, porque restringe o uso comercial.
 
 - 💼 Qualquer uso com finalidade comercial (produtos, serviços, uso em empresa
   com fins lucrativos)
-- 💼 Oferecer o `auto-edit-video` — ou um derivado — como serviço/produto pago
+- 💼 Oferecer o `auto-edit-video` (ou este `auto-edit-hyperframes`) — ou um derivado — como serviço/produto pago
 
-### Versão hosted & licença comercial
+#### Versão hosted & licença comercial
 
 A **versão hospedada (SaaS) é um produto pago oficial e exclusivo** do
 mantenedor. Se você precisa usar o projeto comercialmente ou quer a versão

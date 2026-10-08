@@ -56,3 +56,13 @@ def test_render_without_node_fails_clearly(monkeypatch, tmp_path):
     monkeypatch.setattr(hyperframes, "npx", lambda: None)
     with pytest.raises(RuntimeError, match="Node.js"):
         hyperframes.render("cta", {}, tmp_path, 1920, 1080, 4.0)
+
+
+def test_render_pins_the_vendored_version():
+    # vendor/hyperframes ships with the repo; npx must run that exact version.
+    assert hyperframes.package_spec().startswith("hyperframes@0.")
+
+
+def test_missing_vendor_falls_back_to_latest(monkeypatch, tmp_path):
+    monkeypatch.setattr(hyperframes, "VENDOR_CLI_PACKAGE", tmp_path / "nope.json")
+    assert hyperframes.package_spec() == "hyperframes"

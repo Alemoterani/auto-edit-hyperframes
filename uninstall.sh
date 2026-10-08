@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Uninstall auto-edit-video
+# Uninstall auto-edit-hyperframes
 set -euo pipefail
 
-INSTALL_DIR="${AUTO_EDIT_HOME:-$HOME/.auto-edit-video}"
+INSTALL_DIR="${AUTO_EDIT_HOME:-$HOME/.auto-edit-hyperframes}"
 BIN_LINK="$HOME/.local/bin/auto-edit"
 
 echo ""
-echo "  Removing auto-edit-video..."
+echo "  Removing auto-edit-hyperframes..."
 
 if [ -d "$INSTALL_DIR" ]; then
     rm -rf "$INSTALL_DIR"

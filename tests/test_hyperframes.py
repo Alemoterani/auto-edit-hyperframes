@@ -18,7 +18,7 @@ def test_patch_root_rewrites_size_and_duration_once():
 
 
 def test_every_shipped_template_resolves():
-    for name in ("lower_third", "cta", "highlight", "captions"):
+    for name in ("lower_third", "cta", "highlight", "steps", "stat", "compare", "code", "chart", "captions"):
         assert (hyperframes.template_dir(name) / "index.html").is_file()
 
 
@@ -66,3 +66,22 @@ def test_render_pins_the_vendored_version():
 def test_missing_vendor_falls_back_to_latest(monkeypatch, tmp_path):
     monkeypatch.setattr(hyperframes, "VENDOR_CLI_PACKAGE", tmp_path / "nope.json")
     assert hyperframes.package_spec() == "hyperframes"
+
+
+def test_render_defaults_to_one_worker(monkeypatch, tmp_path):
+    seen = {}
+
+    class Result:
+        returncode = 0
+        stdout = stderr = ""
+
+    def fake_run(cmd, **kwargs):
+        seen["workers"] = cmd[cmd.index("--workers") + 1]
+        Path(cmd[cmd.index("-o") + 1]).write_bytes(b"mov")
+        return Result()
+
+    monkeypatch.setattr(hyperframes, "npx", lambda: "npx")
+    monkeypatch.setattr(hyperframes.subprocess, "run", fake_run)
+    monkeypatch.delenv("AUTO_EDIT_HF_WORKERS", raising=False)
+    hyperframes.render("cta", {}, tmp_path, 640, 360, 1.0)
+    assert seen["workers"] == "1"

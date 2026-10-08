@@ -1,0 +1,60 @@
+<!doctype html>
+<!-- Code: an editor-style window that types out a short snippet or terminal command.
+     Data: window.AE_DATA = {code (≤ 6 short lines), language, caption, accent}
+     (written by auto_edit/hyperframes.py). language "bash"/"terminal" shows a $ prompt.
+     Landscape: card on the right (keeps the face clear). Portrait: card on top (keeps captions clear).
+     Root size/duration are rewritten per render to match the edited video. -->
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800&family=JetBrains+Mono:wght@500;700&display=block" />
+    <script src="data.js"></script>
+    <style>
+      html, body { margin: 0; background: transparent; }
+      #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; font-family: Montserrat, "Segoe UI", Arial, sans-serif; }
+      #wrap { position: absolute; inset: 0; display: flex; box-sizing: border-box; }
+      #card { box-sizing: border-box; border-radius: 1.6vmin; overflow: hidden; background: #0D1117; box-shadow: 0 1.2vmin 4vmin rgba(0, 0, 0, 0.5); border: 0.2vmin solid #30363D; }
+      @media (min-aspect-ratio: 1/1) { #wrap { align-items: center; justify-content: flex-end; padding-right: 4%; } #card { width: 46%; } }
+      @media (max-aspect-ratio: 1/1) { #wrap { align-items: flex-start; justify-content: center; padding-top: 9%; } #card { width: 90%; } }
+      #bar { display: flex; align-items: center; gap: 1vmin; padding: 1.4vmin 2vmin; background: #161B22; }
+      .dot { width: 1.6vmin; height: 1.6vmin; border-radius: 50%; }
+      #lang { margin-left: auto; color: #8B949E; font-weight: 600; font-size: 2vmin; text-transform: uppercase; letter-spacing: 0.08em; }
+      pre { margin: 0; padding: 2.4vmin 2.6vmin; min-height: 6vmin; color: #E6EDF3; font-family: "JetBrains Mono", Consolas, monospace; font-weight: 500; font-size: 3vmin; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+      #cursor { display: inline-block; width: 0.6em; height: 1.1em; vertical-align: text-bottom; background: var(--accent); }
+      #caption { padding: 1.4vmin 2.6vmin 2vmin; color: #fff; font-weight: 800; font-size: 2.8vmin; border-top: 0.2vmin solid #30363D; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="6" data-width="1920" data-height="1080">
+      <div id="wrap"><section id="card" class="clip" data-start="0" data-duration="6">
+        <div id="bar"><span class="dot" style="background:#FF5F56"></span><span class="dot" style="background:#FFBD2E"></span><span class="dot" style="background:#27C93F"></span><span id="lang"></span></div>
+        <pre><span id="typed"></span><span id="cursor"></span></pre>
+        <div id="caption"></div>
+      </section></div>
+    </div>
+    <script>
+      const d = Object.assign({ code: "git commit -m \"feat: nova versão\"", language: "bash", caption: "", accent: "#58A6FF" }, window.AE_DATA || {});
+      document.documentElement.style.setProperty("--accent", d.accent);
+      const terminal = /^(bash|sh|shell|terminal|powershell|cmd)$/i.test(d.language);
+      const lines = String(d.code).split("\n").slice(0, 6);
+      const text = terminal ? lines.map((l) => "$ " + l).join("\n") : lines.join("\n");
+      document.getElementById("lang").textContent = d.language;
+      if (d.caption) document.getElementById("caption").textContent = d.caption; else document.getElementById("caption").remove();
+
+      const typed = document.getElementById("typed");
+      const total = parseFloat(document.getElementById("root").dataset.duration);
+      const typing = Math.min(total * 0.55, Math.max(0.8, text.length * 0.035));
+      const counter = { n: 0 };
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo("#card", { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 0)
+        // onUpdate runs on every seek, so each captured frame shows the right amount of text.
+        .fromTo(counter, { n: 0 }, { n: text.length, duration: typing, ease: "none", onUpdate: () => { typed.textContent = text.slice(0, Math.round(counter.n)); } }, 0.35);
+      for (let t = 0.35 + typing; t < total - 0.5; t += 0.5) tl.set("#cursor", { opacity: Math.round((t - typing) / 0.5) % 2 ? 1 : 0 }, t);
+      if (d.caption) tl.fromTo("#caption", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 0.35 + typing);
+      tl.to("#card", { opacity: 0, y: -30, duration: 0.35, ease: "power2.in" }, Math.max(0.8 + typing, total - 0.4));
+      window.__timelines = window.__timelines || {};
+      window.__timelines.main = tl;
+    </script>
+  </body>
+</html>

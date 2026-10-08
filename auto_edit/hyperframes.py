@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -89,8 +90,11 @@ def render(
         shutil.copytree(src, project)
         (project / "index.html").write_text(html, encoding="utf-8")
         (project / "data.js").write_text(data_js, encoding="utf-8")
+        # One Chrome per worker (~256 MB + a CPU core each). HyperFrames' "auto"
+        # saturates every core; default to 1 so a render can't starve the machine.
+        workers = os.environ.get("AUTO_EDIT_HF_WORKERS", "1")
         cmd = [npx_bin, "-y", package_spec(), "render", str(project),
-               "--format", "mov", "--quiet", "-o", str(output)]
+               "--format", "mov", "--quiet", "--workers", workers, "-o", str(output)]
         if fps:
             cmd += ["--fps", fps]
         print(f"[hyperframes] rendering '{template}' {width}x{height} {duration:.1f}s ...")

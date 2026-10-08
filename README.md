@@ -77,7 +77,12 @@ auto-edit-hyperframes/
 │   ├── overlays/
 │   │   ├── lower_third/       # Nome + subtítulo entrando pela esquerda
 │   │   ├── cta/               # Botão "Se inscreve" com sininho
-│   │   └── highlight/         # Card com dica/termo/comando no canto
+│   │   ├── highlight/         # Card com dica/termo no canto
+│   │   ├── steps/             # Lista de passos que vai se montando
+│   │   ├── stat/              # Número/estatística que conta até o valor
+│   │   ├── compare/           # Antes × depois, mito × fato
+│   │   ├── code/              # Janela de terminal/código digitando
+│   │   └── chart/             # Gráfico de barras animado
 │   └── captions/              # Legendas animadas palavra a palavra
 ├── vendor/
 │   └── hyperframes/           # Código-fonte completo do HyperFrames (snapshot, Apache 2.0)
@@ -192,7 +197,26 @@ auto-edit status upload/meu-video.mp4                                   # estado
 |---|---|---|---|
 | `lower_third` | `title`, `subtitle` | Quem fala se apresenta; convidado, ferramenta ou produto citado pela primeira vez | 4 s |
 | `cta` | `text` | Pedido de inscrição/seguir/curtir | 3–4 s |
-| `highlight` | `label`, `text` | Termo, número, comando ou lição-chave sendo explicada (no máx. 1 a cada ~45 s) | 4–6 s |
+| `highlight` | `label`, `text` | Termo ou lição-chave sendo explicada, quando nenhum explicativo abaixo encaixa melhor | 4–6 s |
+
+### Templates explicativos (motion graphics)
+
+Ilustram **o que você está explicando**. O agente escolhe pelo formato do que é dito e usa só dados que aparecem na fala — nunca inventa números, passos ou código.
+
+| Template | `vars` | Quando o agente usa | Duração |
+|---|---|---|---|
+| `steps` | `title`, `items` (2–5) | Você lista passos, dicas ou motivos ("primeiro…, depois…") — os itens aparecem um a um | 5–10 s |
+| `stat` | `value`, `prefix`, `suffix`, `decimals`, `label` | Um número marcante — o valor conta de 0 até ele (formato brasileiro: `R$ 1.250,50`) | 4–5 s |
+| `compare` | `title`, `left_label`, `left`, `right_label`, `right` | Um contraste: antes × depois, errado × certo, mito × fato | 5–7 s |
+| `code` | `code`, `language`, `caption` | Um comando, atalho ou trecho de código — aparece sendo digitado | 4–7 s |
+| `chart` | `title`, `bars`, `unit`, `highlight` | Comparação entre quantidades (preços, taxas, tempos) — barras crescem até o valor | 5–7 s |
+
+No vídeo horizontal eles ficam **à direita** (sem cobrir o rosto); no vertical ficam **no topo** (sem cobrir as legendas). No máximo um explicativo a cada ~30 s.
+
+```json
+{"template": "stat", "vars": {"value": 1250.5, "prefix": "R$ ", "decimals": 2, "label": "perdidos por ano em juros do cartão"}, "original_start": 42.0, "duration": 5}
+{"template": "compare", "vars": {"left_label": "Mito", "left": "O salário vai ser cortado", "right_label": "Fato", "right": "Só muda o calendário"}, "original_start": 88.3, "duration": 6}
+```
 
 Todos aceitam `"accent": "#RRGGBB"` em `vars` para mudar a cor. Exemplo de `overlay_plan.json`:
 
@@ -223,7 +247,7 @@ Referência completa do formato: [`vendor/hyperframes/docs/reference/html-schema
 
 ## Desempenho
 
-O render é quadro a quadro num Chrome headless, então é mais lento que o FFmpeg puro. Medido num PC Windows comum:
+O render é quadro a quadro num Chrome headless, então é mais lento que o FFmpeg puro. Por padrão o auto-edit usa **1 processo de Chrome** por render (`AUTO_EDIT_HF_WORKERS=1`) para não sobrecarregar a máquina; em um PC estável e com folga, `AUTO_EDIT_HF_WORKERS=auto` usa todos os núcleos e fica bem mais rápido. Medido num PC Windows comum com `auto`:
 
 | O quê | Tempo |
 |---|---|
@@ -395,6 +419,7 @@ auto-edit short video.mp4 \
 
 | Variável | Efeito |
 |---|---|
+| `AUTO_EDIT_HF_WORKERS` | Processos de Chrome por render HyperFrames (padrão `1`; `auto` = todos os núcleos) |
 | `AUTO_EDIT_OVERLAYS_STRICT=1` | Falha o stage `overlay` se um overlay planejado não puder ser gerado (MP4 ausente ou render HyperFrames com erro), em vez de só avisar |
 | `AUTO_EDIT_ASSETS_OVERLAYS` | Pasta com seus MP4s de overlay com tela verde |
 | `AUTO_EDIT_FFMPEG` | FFmpeg específico (com libass) para as legendas ASS |

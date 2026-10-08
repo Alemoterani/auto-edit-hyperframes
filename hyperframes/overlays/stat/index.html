@@ -1,0 +1,50 @@
+<!doctype html>
+<!-- Stat: a big number that counts up, with a label underneath ("73% dos devs...").
+     Data: window.AE_DATA = {value (number), prefix, suffix, decimals, label, accent}
+     (written by auto_edit/hyperframes.py). Formatted with pt-BR separators.
+     Landscape: card on the right (keeps the face clear). Portrait: card on top (keeps captions clear).
+     Root size/duration are rewritten per render to match the edited video. -->
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800;900&display=block" />
+    <script src="data.js"></script>
+    <style>
+      html, body { margin: 0; background: transparent; }
+      #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; font-family: Montserrat, "Segoe UI", Arial, sans-serif; }
+      #wrap { position: absolute; inset: 0; display: flex; box-sizing: border-box; }
+      #card { box-sizing: border-box; padding: 3vmin 3.6vmin; border-radius: 2vmin; background: rgba(12, 12, 16, 0.88); box-shadow: 0 1.2vmin 4vmin rgba(0, 0, 0, 0.45); color: #fff; text-align: center; }
+      @media (min-aspect-ratio: 1/1) { #wrap { align-items: center; justify-content: flex-end; padding-right: 4%; } #card { width: 40%; } }
+      @media (max-aspect-ratio: 1/1) { #wrap { align-items: flex-start; justify-content: center; padding-top: 9%; } #card { width: 80%; } }
+      #value { font-weight: 900; font-size: 11vmin; line-height: 1; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+      #bar { height: 0.6vmin; width: 30%; margin: 2vmin auto; border-radius: 1vmin; background: var(--accent); }
+      #label { font-weight: 700; font-size: 3.6vmin; line-height: 1.2; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="5" data-width="1920" data-height="1080">
+      <div id="wrap"><section id="card" class="clip" data-start="0" data-duration="5"><div id="value"></div><div id="bar"></div><div id="label"></div></section></div>
+    </div>
+    <script>
+      const d = Object.assign({ value: 73, prefix: "", suffix: "%", decimals: 0, label: "", accent: "#22C55E" }, window.AE_DATA || {});
+      document.documentElement.style.setProperty("--accent", d.accent);
+      const valueEl = document.getElementById("value");
+      const fmt = (n) => d.prefix + Number(n).toLocaleString("pt-BR", { minimumFractionDigits: d.decimals, maximumFractionDigits: d.decimals }) + d.suffix;
+      valueEl.textContent = fmt(0);
+      if (d.label) document.getElementById("label").textContent = d.label; else document.getElementById("label").remove();
+
+      const total = parseFloat(document.getElementById("root").dataset.duration);
+      const counter = { n: 0 };
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo("#card", { scale: 0.85, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.4, ease: "back.out(1.8)" }, 0)
+        // onUpdate runs on every seek, so the number is right on any frame HyperFrames captures.
+        .fromTo(counter, { n: 0 }, { n: Number(d.value), duration: Math.min(1.8, total * 0.45), ease: "power2.out", onUpdate: () => { valueEl.textContent = fmt(counter.n); } }, 0.2)
+        .fromTo("#bar", { scaleX: 0 }, { scaleX: 1, duration: 0.5, ease: "power2.out" }, 0.35)
+        .fromTo("#label", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.35 }, 0.5)
+        .to("#card", { opacity: 0, scale: 0.9, duration: 0.35, ease: "power2.in" }, Math.max(1.2, total - 0.4));
+      window.__timelines = window.__timelines || {};
+      window.__timelines.main = tl;
+    </script>
+  </body>
+</html>

@@ -1,0 +1,64 @@
+<!doctype html>
+<!-- Compare: two side-by-side panels ("Antes" x "Depois", "Errado" x "Certo", "Mito" x "Fato").
+     Data: window.AE_DATA = {title, left_label, left, right_label, right, accent}
+     (written by auto_edit/hyperframes.py). Left is shown as the "bad" side, right as the "good" side.
+     Landscape: card on the right (keeps the face clear). Portrait: card on top (keeps captions clear).
+     Root size/duration are rewritten per render to match the edited video. -->
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800;900&display=block" />
+    <script src="data.js"></script>
+    <style>
+      html, body { margin: 0; background: transparent; }
+      #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; font-family: Montserrat, "Segoe UI", Arial, sans-serif; }
+      #wrap { position: absolute; inset: 0; display: flex; box-sizing: border-box; }
+      #card { box-sizing: border-box; padding: 3vmin; border-radius: 2vmin; background: rgba(12, 12, 16, 0.88); box-shadow: 0 1.2vmin 4vmin rgba(0, 0, 0, 0.45); color: #fff; }
+      @media (min-aspect-ratio: 1/1) { #wrap { align-items: center; justify-content: flex-end; padding-right: 4%; } #card { width: 46%; } }
+      @media (max-aspect-ratio: 1/1) { #wrap { align-items: flex-start; justify-content: center; padding-top: 9%; } #card { width: 88%; } }
+      #title { font-weight: 900; font-size: 3.8vmin; text-align: center; margin-bottom: 2.2vmin; }
+      #cols { display: grid; grid-template-columns: 1fr auto 1fr; align-items: stretch; gap: 1.6vmin; }
+      .side { border-radius: 1.4vmin; padding: 2.2vmin; display: flex; flex-direction: column; gap: 1vmin; }
+      #left { background: rgba(239, 68, 68, 0.16); border: 0.35vmin solid #EF4444; }
+      #right { background: rgba(34, 197, 94, 0.16); border: 0.35vmin solid var(--accent); }
+      .tag { font-weight: 900; font-size: 2.4vmin; letter-spacing: 0.08em; text-transform: uppercase; }
+      #left .tag { color: #EF4444; } #right .tag { color: var(--accent); }
+      .body { font-weight: 700; font-size: 3.2vmin; line-height: 1.2; }
+      #arrow { align-self: center; font-weight: 900; font-size: 5vmin; color: #fff; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="6" data-width="1920" data-height="1080">
+      <div id="wrap"><section id="card" class="clip" data-start="0" data-duration="6">
+        <div id="title"></div>
+        <div id="cols">
+          <div class="side" id="left"><div class="tag"></div><div class="body"></div></div>
+          <div id="arrow">→</div>
+          <div class="side" id="right"><div class="tag"></div><div class="body"></div></div>
+        </div>
+      </section></div>
+    </div>
+    <script>
+      const d = Object.assign({ title: "", left_label: "Antes", left: "", right_label: "Depois", right: "", accent: "#22C55E" }, window.AE_DATA || {});
+      document.documentElement.style.setProperty("--accent", d.accent);
+      const set = (sel, text) => { document.querySelector(sel).textContent = text; };
+      set("#left .tag", d.left_label); set("#left .body", d.left);
+      set("#right .tag", d.right_label); set("#right .body", d.right);
+      if (d.title) set("#title", d.title); else document.getElementById("title").remove();
+
+      const total = parseFloat(document.getElementById("root").dataset.duration);
+      // The "after" side lands about a third in, so the viewer reads "before" first.
+      const reveal = Math.min(2, Math.max(0.9, total * 0.3));
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo("#card", { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power3.out" }, 0)
+        .fromTo("#left", { x: -30, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4 }, 0.25)
+        .fromTo("#arrow", { x: -20, opacity: 0 }, { x: 0, opacity: 1, duration: 0.3 }, reveal - 0.25)
+        .fromTo("#right", { x: 30, opacity: 0, scale: 0.92 }, { x: 0, opacity: 1, scale: 1, duration: 0.45, ease: "back.out(1.8)" }, reveal)
+        .to("#left", { opacity: 0.55, duration: 0.3 }, reveal + 0.2)
+        .to("#card", { opacity: 0, y: -30, duration: 0.35, ease: "power2.in" }, Math.max(reveal + 0.8, total - 0.4));
+      window.__timelines = window.__timelines || {};
+      window.__timelines.main = tl;
+    </script>
+  </body>
+</html>

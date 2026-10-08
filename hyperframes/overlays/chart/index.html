@@ -1,0 +1,71 @@
+<!doctype html>
+<!-- Chart: horizontal bars that grow to their values, for comparing a few quantities.
+     Data: window.AE_DATA = {title, bars: [{label, value}, ...] (2-5), unit, highlight (label to emphasize), accent}
+     (written by auto_edit/hyperframes.py). Bars are scaled to the largest value.
+     Landscape: card on the right (keeps the face clear). Portrait: card on top (keeps captions clear).
+     Root size/duration are rewritten per render to match the edited video. -->
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800;900&display=block" />
+    <script src="data.js"></script>
+    <style>
+      html, body { margin: 0; background: transparent; }
+      #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; font-family: Montserrat, "Segoe UI", Arial, sans-serif; }
+      #wrap { position: absolute; inset: 0; display: flex; box-sizing: border-box; }
+      #card { box-sizing: border-box; padding: 3vmin 3.6vmin; border-radius: 2vmin; background: rgba(12, 12, 16, 0.88); box-shadow: 0 1.2vmin 4vmin rgba(0, 0, 0, 0.45); color: #fff; }
+      @media (min-aspect-ratio: 1/1) { #wrap { align-items: center; justify-content: flex-end; padding-right: 4%; } #card { width: 44%; } }
+      @media (max-aspect-ratio: 1/1) { #wrap { align-items: flex-start; justify-content: center; padding-top: 9%; } #card { width: 88%; } }
+      #title { font-weight: 900; font-size: 3.8vmin; margin-bottom: 2.4vmin; }
+      .row { margin-top: 1.8vmin; }
+      .head { display: flex; justify-content: space-between; font-weight: 700; font-size: 2.8vmin; margin-bottom: 0.8vmin; }
+      .val { font-variant-numeric: tabular-nums; }
+      .track { height: 3vmin; border-radius: 1.5vmin; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+      .fill { height: 100%; border-radius: 1.5vmin; background: #8B949E; transform-origin: left center; }
+      .row.hi .fill { background: var(--accent); }
+      .row.hi .head { color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="6" data-width="1920" data-height="1080">
+      <div id="wrap"><section id="card" class="clip" data-start="0" data-duration="6"><div id="title"></div><div id="bars"></div></section></div>
+    </div>
+    <script>
+      const d = Object.assign({ title: "", bars: [{ label: "A", value: 40 }, { label: "B", value: 90 }], unit: "", highlight: "", accent: "#FF4500" }, window.AE_DATA || {});
+      document.documentElement.style.setProperty("--accent", d.accent);
+      if (d.title) document.getElementById("title").textContent = d.title; else document.getElementById("title").remove();
+
+      const bars = d.bars.slice(0, 5);
+      const max = Math.max(...bars.map((b) => Number(b.value)), 1);
+      // Without an explicit highlight, emphasize the biggest bar.
+      const hi = d.highlight || bars.reduce((a, b) => (Number(b.value) > Number(a.value) ? b : a), bars[0]).label;
+      const fmt = (n) => Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + (d.unit === "%" ? "%" : d.unit ? " " + d.unit : "");
+      const rows = bars.map((b) => {
+        const row = document.createElement("div");
+        row.className = "row" + (b.label === hi ? " hi" : "");
+        row.innerHTML = '<div class="head"><span class="lbl"></span><span class="val"></span></div><div class="track"><div class="fill"></div></div>';
+        row.querySelector(".lbl").textContent = b.label;
+        row.querySelector(".fill").style.width = (100 * Number(b.value) / max) + "%";
+        document.getElementById("bars").appendChild(row);
+        return { row, value: Number(b.value) };
+      });
+
+      const total = parseFloat(document.getElementById("root").dataset.duration);
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo("#card", { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power3.out" }, 0);
+      rows.forEach(({ row, value }, i) => {
+        const at = 0.4 + i * 0.25;
+        const val = row.querySelector(".val");
+        const c = { n: 0 };
+        tl.fromTo(row, { opacity: 0 }, { opacity: 1, duration: 0.25 }, at)
+          .fromTo(row.querySelector(".fill"), { scaleX: 0 }, { scaleX: 1, duration: 0.9, ease: "power2.out" }, at)
+          // onUpdate runs on every seek, so the numbers are right on any captured frame.
+          .fromTo(c, { n: 0 }, { n: value, duration: 0.9, ease: "power2.out", onUpdate: () => { val.textContent = fmt(c.n); } }, at);
+      });
+      tl.to("#card", { opacity: 0, y: -30, duration: 0.35, ease: "power2.in" }, Math.max(1.8, total - 0.4));
+      window.__timelines = window.__timelines || {};
+      window.__timelines.main = tl;
+    </script>
+  </body>
+</html>

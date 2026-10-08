@@ -18,7 +18,19 @@ Instead of a `file`, an entry can use a `template` with short text in `vars`. Pr
 
 - **lower_third** — `vars: {"title", "subtitle"}`. Name + role when the speaker introduces themselves, or a guest/tool/product when it is first named. `duration` 4.
 - **cta** — `vars: {"text"}`, e.g. `"Se inscreve no canal"`. At the exact moment a subscribe/follow/like CTA begins. `duration` 3–4.
-- **highlight** — `vars: {"label", "text"}`, e.g. `{"label": "Dica", "text": "Use git worktree"}`. A key term, number, command, or takeaway the speaker is explaining. `duration` 4–6. At most one every ~45s; never overlapping another overlay.
+- **highlight** — `vars: {"label", "text"}`, e.g. `{"label": "Dica", "text": "Use git worktree"}`. A key term or takeaway the speaker is explaining, when none of the explainer templates below fits better. `duration` 4–6.
+
+### Explainer templates — illustrate what is being said
+
+Use these to *show* what the speaker is explaining. Only use data that is actually said in the transcription — never invent numbers, steps, or code.
+
+- **steps** — `vars: {"title", "items": ["...", ...]}` (2–5 items, ≤ 35 chars each). The speaker lists steps, tips, reasons, or items ("primeiro…, depois…, por último…"). Place it when the list starts; `duration` long enough to cover the whole list (5–10).
+- **stat** — `vars: {"value": 73, "prefix": "", "suffix": "%", "decimals": 0, "label": "..."}`. The speaker says a striking number, percentage, or amount of money. `value` must be a number (e.g. `1250.5` with `"prefix": "R$ "`, `"decimals": 2`). `duration` 4–5.
+- **compare** — `vars: {"title", "left_label", "left", "right_label", "right"}`. A contrast: antes × depois, errado × certo, mito × fato, caro × barato. Left is shown as the bad/old side, right as the good/new side. `duration` 5–7.
+- **code** — `vars: {"code", "language", "caption"}`. A command, shortcut, formula, or code the speaker says or types (≤ 6 short lines, use `\n` between lines). `language` `"bash"` shows a `$` prompt. `duration` 4–7.
+- **chart** — `vars: {"title", "bars": [{"label", "value"}, ...], "unit", "highlight"}` (2–5 bars). The speaker compares quantities (prices, rates, times, percentages). `unit` like `"%"` or `"R$"`; `highlight` is the label to emphasize (default: biggest). `duration` 5–7.
+
+Pacing: at most one explainer every ~30s, and never two overlays on screen at once. Prefer the explainer that matches the *shape* of what is said: a list → `steps`, one number → `stat`, two sides → `compare`, several numbers → `chart`, a command → `code`.
 
 Optional `"accent": "#RRGGBB"` in `vars` changes the color.
 

@@ -13,6 +13,7 @@ fine for months and then crash on the one clip that happens to carry it.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -113,3 +114,19 @@ def has_audio_stream(path: Path | str) -> bool:
         return bool(parse_streams(_run_probe(path, "a:0", "stream=index")))
     except ProbeError:
         return False
+
+
+def filtered_size(video: Path | str, video_filter: str | None) -> tuple[int, int]:
+    """Frame size after an ffmpeg filter chain (e.g. pipeline.json "video_filter"
+    with an upscale), so overlays/captions can be rendered at the final size."""
+    if not video_filter:
+        return video_size(video)
+    result = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-i", str(Path(video).resolve()), "-frames:v", "1",
+         "-vf", f"{video_filter},showinfo", "-f", "null", "-"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    m = re.search(r"\bs:(\d+)x(\d+)", result.stderr or "")
+    if not m:
+        raise ProbeError(f"could not read frame size after video_filter {video_filter!r}")
+    return int(m.group(1)), int(m.group(2))

@@ -158,7 +158,16 @@ def _filter_for_short(overlays: list[dict], video_type: str) -> tuple[list[dict]
     return kept, dropped
 
 
+def _set_overlay_filtered(workspace: Path, value: bool) -> None:
+    """Tell the captioner whether overlaid_video.mp4 already went through video_filter."""
+    from auto_edit import pipeline as pl
+    p = pl.load(workspace)
+    p["overlay_filtered"] = value
+    pl.save(workspace, p)
+
+
 def overlay(workspace: Path) -> None:
+    _set_overlay_filtered(workspace, False)
     plan = json.loads((workspace / "overlay_plan.json").read_text())
     overlays = plan.get("overlays", [])
 
@@ -177,7 +186,10 @@ def overlay(workspace: Path) -> None:
     kept = _build_kept_intervals(reviewed_plan, pipeline)
 
     input_video = workspace / "edited_video.mp4"
-    vw, vh = _video_size(input_video)
+    video_filter = pipeline.get("video_filter")
+    # Render templates at the final frame size (after an upscale in video_filter),
+    # not the raw edit's — otherwise the graphics get upscaled with the footage.
+    vw, vh = _frame_size(input_video, video_filter)
     fps = _video_fps(input_video)
 
     def render_template(ov: dict) -> Path:
@@ -207,7 +219,8 @@ def overlay(workspace: Path) -> None:
 
     output_video = workspace / "overlaid_video.mp4"
     if placed:
-        _run_ffmpeg_overlay(input_video, placed, output_video)
+        _run_ffmpeg_overlay(input_video, placed, output_video, video_filter)
+        _set_overlay_filtered(workspace, bool(video_filter))
     else:
         import shutil
         shutil.copy2(input_video, output_video)
@@ -263,10 +276,15 @@ def _video_size(path: Path) -> tuple[int, int]:
     return probe.video_size(path)
 
 
+def _frame_size(path: Path, video_filter: str | None) -> tuple[int, int]:
+    return probe.filtered_size(path, video_filter) if video_filter else _video_size(path)
+
+
 def _run_ffmpeg_overlay(
     video: Path,
     placed: list[dict],
     output: Path,
+    video_filter: str | None = None,
 ) -> None:
     # Build input args: main video + one input per unique asset
     assets = list({p["asset"] for p in placed})
@@ -276,7 +294,7 @@ def _run_ffmpeg_overlay(
     for asset in assets:
         input_args += ["-i", str(asset)]
 
-    vw, vh = _video_size(video)
+    vw, vh = _frame_size(video, video_filter)
     print(f"[overlayer] Main video {vw}x{vh} — scaling each overlay to fit frame before chromakey")
 
     # Scale each overlay to the main video frame (letterbox pad), then chromakey, then overlay.
@@ -288,7 +306,10 @@ def _run_ffmpeg_overlay(
     fps = _video_fps(video)
     filter_parts: list[str] = []
     prev = "0:v"
-    if fps:
+    if video_filter:
+        filter_parts.append(f"[0:v]{video_filter}" + (f",fps={fps}" if fps else "") + "[base]")
+        prev = "base"
+    elif fps:
         filter_parts.append(f"[0:v]fps={fps}[base]")
         prev = "base"
     for i, p in enumerate(placed):

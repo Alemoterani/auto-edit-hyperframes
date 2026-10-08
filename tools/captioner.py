@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -325,7 +324,10 @@ def caption(workspace: Path) -> None:
 
     # 5. Burn captions into video
     output = workspace / "captioned_video.mp4"
-    pre_filter = pipeline.get("video_filter")
+    # The overlay stage already ran video_filter on overlaid_video.mp4 (so its
+    # graphics render at the final size); filtering again would double it.
+    already_filtered = edited_video.name == "overlaid_video.mp4" and pipeline.get("overlay_filtered")
+    pre_filter = None if already_filtered else pipeline.get("video_filter")
     if style.get("engine") == "hyperframes":
         try:
             _overlay_hyperframes_captions(edited_video, groups, style, workspace, output, pre_filter)
@@ -624,23 +626,6 @@ def _ass_to_css(color: str) -> str:
     return f"#{rr}{gg}{bb}"
 
 
-def _filtered_size(video: Path, pre_filter: str | None) -> tuple[int, int]:
-    """Frame size after pipeline.json "video_filter" (e.g. an upscale), so the
-    captions are rendered at the final resolution instead of being scaled."""
-    from auto_edit import probe
-    if not pre_filter:
-        return probe.video_size(video)
-    result = subprocess.run(
-        ["ffmpeg", "-hide_banner", "-i", str(video.resolve()), "-frames:v", "1",
-         "-vf", f"{pre_filter},showinfo", "-f", "null", "-"],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
-    )
-    m = re.search(r"\bs:(\d+)x(\d+)", result.stderr or "")
-    if not m:
-        raise RuntimeError(f"could not read frame size after video_filter {pre_filter!r}")
-    return int(m.group(1)), int(m.group(2))
-
-
 def _overlay_hyperframes_captions(
     video: Path,
     groups: list[list[dict]],
@@ -653,7 +638,7 @@ def _overlay_hyperframes_captions(
     composite them over the video, after the optional pre_filter."""
     from auto_edit import hyperframes, probe
 
-    width, height = _filtered_size(video, pre_filter)
+    width, height = probe.filtered_size(video, pre_filter)
     data = {
         "groups": [[{"word": w["word"], "start": w["start"], "end": w["end"]} for w in g] for g in groups],
         "style": {

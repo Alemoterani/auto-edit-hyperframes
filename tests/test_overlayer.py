@@ -215,3 +215,26 @@ def test_overlay_starts_playing_at_its_placement(monkeypatch):
     # (frozen on its last frame) by the time `enable` turns it on at 2s.
     graph = " ".join(_capture_cmd(monkeypatch))
     assert "setpts=PTS-STARTPTS+2.000/TB" in graph
+
+
+def test_video_filter_runs_before_the_overlays(monkeypatch):
+    # The graphics are rendered at the post-filter size, so the base video must be
+    # filtered (e.g. upscaled) before they are composited, not after.
+    captured = {}
+
+    class Result:
+        returncode = 0
+
+    monkeypatch.setattr(overlayer.probe, "filtered_size", lambda p, f: (1080, 1920))
+    monkeypatch.setattr(overlayer, "_video_fps", lambda p: "30")
+    monkeypatch.setattr(overlayer, "_has_audio_stream", lambda p: True)
+    monkeypatch.setattr(overlayer, "_get_video_codec", lambda: ("libx264", []))
+    monkeypatch.setattr(overlayer.subprocess, "run", lambda cmd, *a, **k: captured.setdefault("cmd", cmd) and Result())
+
+    overlayer._run_ffmpeg_overlay(
+        Path("edit.mp4"), [{"asset": Path("x.mov"), "start": 1.0, "end": 3.0}], Path("out.mp4"),
+        "scale=1080:1920:flags=lanczos",
+    )
+    graph = captured["cmd"][captured["cmd"].index("-filter_complex") + 1]
+    assert graph.startswith("[0:v]scale=1080:1920:flags=lanczos,fps=30[base]")
+    assert "scale=w=1080:h=1920" in graph  # overlay fitted to the filtered frame

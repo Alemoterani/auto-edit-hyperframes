@@ -8,6 +8,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from auto_edit.chapters import description_with_chapters
+
 STAGES = ["extract", "plan", "review", "execute", "overlay", "caption", "evaluate", "metadata", "thumbnail", "done"]
 
 # Stages that are skipped per video type
@@ -76,6 +78,20 @@ def save(workspace: Path, pipeline: dict) -> None:
     (workspace / "pipeline.json").write_text(
         json.dumps(pipeline, indent=2, ensure_ascii=False), encoding="utf-8"
     )
+
+
+def set_reorder(workspace: Path, enabled: bool = True) -> None:
+    """Let the execute stage reorder whole blocks (kept across `resume`)."""
+    p = load(workspace)
+    p["reorder"] = bool(enabled)
+    save(workspace, p)
+
+
+def set_cold_open(workspace: Path, enabled: bool = True) -> None:
+    """Ask the execute stage for a cold open (kept across `resume`)."""
+    p = load(workspace)
+    p["cold_open"] = bool(enabled)
+    save(workspace, p)
 
 
 def set_stage_status(workspace: Path, stage: str, status: str, error: str | None = None) -> dict:
@@ -178,10 +194,16 @@ def finalize(workspace: Path) -> Path:
 
     # Copy SRT if available
     srt_src = workspace / "captions.srt"
+    srt_dst = output_dir / f"{video_name}.srt"
     if srt_src.exists():
-        srt_dst = output_dir / f"{video_name}.srt"
         shutil.copy2(srt_src, srt_dst)
         print(f"[finalize] SRT → {srt_dst}")
+    elif pipeline.get("type") == "long":
+        # The long has no burned captions: a subtitle track for YouTube.
+        from auto_edit import subtitles
+
+        if subtitles.write_for_workspace(workspace, srt_dst):
+            print(f"[finalize] SRT (legenda do long) → {srt_dst}")
 
     # Copy thumbnail if available
     thumb_src = workspace / "thumbnail.png"
@@ -287,6 +309,8 @@ def _write_metadata_txt(path: Path, metadata: dict, video_type: str) -> None:
             "HASHTAGS:",
             " ".join(metadata.get("hashtags", [])),
         ]
+        if metadata.get("pinned_comment"):
+            lines += ["", "COMENTÁRIO PRA FIXAR:", metadata["pinned_comment"]]
     else:
         lines += [
             "=== YOUTUBE ===",
@@ -294,11 +318,15 @@ def _write_metadata_txt(path: Path, metadata: dict, video_type: str) -> None:
             f"TÍTULO: {metadata.get('youtube_title', '')}",
             "",
             "DESCRIÇÃO:",
-            metadata.get("youtube_description", ""),
+            description_with_chapters(
+                metadata.get("youtube_description", ""), metadata.get("chapters") or []
+            ),
             "",
             "TAGS:",
             ", ".join(metadata.get("tags", [])),
         ]
+        if metadata.get("pinned_comment"):
+            lines += ["", "COMENTÁRIO PRA FIXAR:", metadata["pinned_comment"]]
     path.write_text("\n".join(lines), encoding="utf-8")
 
 

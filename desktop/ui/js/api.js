@@ -49,5 +49,54 @@ export const startEdit = (payload) =>
     body: JSON.stringify(payload),
   });
 
+export const shorts = (id, maxDur) =>
+  json(`/api/videos/${encodeURIComponent(id)}/shorts${maxDur ? `?max_dur=${maxDur}` : ""}`);
+
+export const findShorts = (id, max_dur) =>
+  json(`/api/videos/${encodeURIComponent(id)}/shorts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ max_dur }),
+  });
+
+export const cutShorts = (id, pick, max_dur) =>
+  json(`/api/videos/${encodeURIComponent(id)}/shorts/cut`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pick, max_dur }),
+  });
+
+export const openFile = (id, kind, reveal = false) =>
+  json(`/api/videos/${encodeURIComponent(id)}/open/${kind}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reveal }),
+  });
+
+export const youtubeAccount = () => json("/api/publish/youtube");
+
+export const connectYoutube = () => json("/api/publish/youtube/connect", { method: "POST" });
+
+export const publishState = (id) => json(`/api/videos/${encodeURIComponent(id)}/publish`);
+
+export const publishYoutube = (id, payload) =>
+  json(`/api/videos/${encodeURIComponent(id)}/publish/youtube`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+export const retention = (id) => json(`/api/videos/${encodeURIComponent(id)}/retention`);
+
+export const refreshRetention = (id) =>
+  json(`/api/videos/${encodeURIComponent(id)}/retention`, { method: "POST" });
+
+export const openUrl = (url) =>
+  json("/api/open-url", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+
 export const videoEvents = (id) =>
   new EventSource(`${API}/api/videos/${encodeURIComponent(id)}/events`);

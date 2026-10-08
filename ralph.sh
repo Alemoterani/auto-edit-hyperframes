@@ -372,12 +372,26 @@ final = sum(float(s[\"end\"]) - float(s[\"start\"]) for s in kept)
 if final:
     print(f'[dry-run] Final duration: {final/60:.1f}min (from kept segments)')
 " "$WORKSPACE"
+                $PYTHON -m auto_edit.opening "$WORKSPACE" || true
                 break
+            fi
+            # Cold open / reorder (opt-in: --cold-open, --reorder): an agent picks a moment from later
+            # in the video to play first and/or a new block order, written as the plan's sequence. A failed or
+            # skipped cold open never fails the edit — it just plays in order.
+            if $PYTHON -m auto_edit.sequence wants-cold-open "$WORKSPACE"; then
+                rm -f "$WORKSPACE/cold_open.json"
+                if ( fail_stage() { exit 1; }
+                     run_standalone_agent "coldopen" "$WORKSPACE/cold_open.json" "$AGENTS_DIR/cold_open.md" ); then
+                    $PYTHON -m auto_edit.sequence cold-open "$WORKSPACE" || log "WARNING: cold open merge failed — editing without it"
+                else
+                    log "WARNING: cold open agent failed — editing without it"
+                fi
             fi
             run_python_tool "execute" "$TOOLS_DIR/executor.py"
             # Transcript of the edited video, so evaluate judges the cut and
             # not the raw footage.
             $PYTHON -m auto_edit.postcut "$WORKSPACE" || { log "ERROR: postcut failed"; exit 1; }
+            $PYTHON -m auto_edit.opening "$WORKSPACE" || true
             ;;
 
         overlay)
@@ -399,7 +413,11 @@ if final:
             ;;
 
         metadata)
-            run_agent "metadata" "$WORKSPACE/metadata.json" "$AGENTS_DIR/metadata.md"
+            run_agent "metadata" "$WORKSPACE/metadata.json" "$AGENTS_DIR/metadata.md" no-advance
+            # Capítulos fora das regras do YouTube somem aqui (com o motivo no
+            # log); nunca falham o stage.
+            $PYTHON -m auto_edit.chapters "$WORKSPACE" || true
+            advance_stage "metadata"
             ;;
 
         thumbnail)

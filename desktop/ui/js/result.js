@@ -2,8 +2,10 @@
 // pronto pra copiar. É a última parada: daqui você posta.
 
 import * as api from "./api.js";
-import { el, escapeHtml, humanSize, setEngine } from "./shell.js";
+import { el, escapeHtml, releaseMedia, humanSize, setEngine } from "./shell.js";
 import { go } from "./router.js";
+import { mountPublish, unmountPublish } from "./publish.js";
+import { mountRetention } from "./retention.js";
 
 const state = { id: null, data: null };
 
@@ -14,6 +16,7 @@ const FIELDS = [
   ["youtube_description", "Descrição"],
   ["hashtags", "Hashtags"],
   ["tags", "Tags"],
+  ["pinned_comment", "Comentário pra fixar"],
 ];
 
 function valueText(v) {
@@ -43,7 +46,8 @@ function fileHTML(kind, info, id) {
   <div class="file">
     <span class="file-kind">${label}</span>
     <span class="file-size mono">${humanSize(info.size)}</span>
-    <a class="file-open mono" href="${api.API}/api/videos/${encodeURIComponent(id)}/file/${kind}" target="_blank" rel="noopener">abrir</a>
+    <button class="btn btn-sm" data-open="${kind}">abrir</button>
+    <button class="btn btn-sm" data-open="${kind}" data-reveal="1">mostrar na pasta</button>
     <button class="btn btn-sm copy" data-copy="${escapeHtml(info.path)}">copiar caminho</button>
   </div>`;
 }
@@ -54,8 +58,12 @@ function render(d) {
   el("res-sub").innerHTML =
     `<span class="badge ${d.type === "short" ? "short" : "long"}">${d.type || "?"}</span>` +
     `<span class="chip ${d.status}"><span class="d"></span>${
-      { done: "Pronto", running: "Rodando", failed: "Falhou", idle: "Parado" }[d.status] || d.status
+      { done: "Pronto", running: "Rodando", failed: "Falhou", idle: "Parado", queued: "Na fila" }[d.status] || d.status
     }</span>`;
+
+  // Shorts derivam de um long pronto; o próprio short não vira short.
+  el("btn-res-shorts").hidden = !(d.type === "long" && d.status === "done");
+  el("btn-res-shorts").href = `#/video/${encodeURIComponent(d.id)}/shorts`;
 
   const files = d.files || {};
   const hasVideo = Boolean(files.video);
@@ -123,6 +131,14 @@ function wire() {
   document.querySelector('[data-screen="result"]').addEventListener("click", (e) => {
     const btn = e.target.closest("button.copy");
     if (btn) copy(btn.dataset.copy, btn);
+    const open = e.target.closest("button[data-open]");
+    if (open) {
+      // O motor abre pelo sistema: a janela do Tauri não segue link de download.
+      api.openFile(state.id, open.dataset.open, Boolean(open.dataset.reveal)).catch((err) => {
+        el("res-error").hidden = false;
+        el("res-error").textContent = `não deu pra abrir: ${err.message || err}`;
+      });
+    }
   });
   el("btn-res-back").addEventListener("click", () => go(`/video/${encodeURIComponent(state.id)}`));
 }
@@ -133,9 +149,13 @@ export default {
     if (!state.wired) { wire(); state.wired = true; }
     state.id = id;
     el("res-video").removeAttribute("src");
+    el("btn-res-shorts").hidden = true;
     load(id);
+    mountPublish(id);
+    mountRetention(id);
   },
   unmount() {
-    el("res-video").pause?.();
+    unmountPublish();
+    releaseMedia(el("res-video"));
   },
 };

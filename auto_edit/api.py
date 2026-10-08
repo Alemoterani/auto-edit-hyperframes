@@ -16,10 +16,23 @@ Endpoints
     PUT  /api/videos/<id>/plan       {kept_segments: [{start, end, summary?}]}
     GET  /api/videos/<id>/result     (metadata + arquivos finais)
     GET  /api/videos/<id>/file/<kind>  (video | thumbnail | captions | notes)
+    POST /api/videos/<id>/open/<kind>  {reveal}  abre no app padrão / no Finder
     POST /api/edit                 {video_path, type, context, language,
-                                    whisper_model, max_iterations, dry_run,
+                                    whisper_model, max_iterations, dry_run, cold_open, reorder,
                                     overlays_dir}
     POST /api/videos/<id>/resume   {from_stage, overlays_dir}
+    GET  /api/videos/<id>/shorts?max_dur=   (candidatos a short de um long pronto)
+    POST /api/videos/<id>/shorts       {max_dur}  roda o clipper (job, SSE)
+    POST /api/videos/<id>/shorts/cut   {pick: [1, 3], max_dur}  corta em fila
+    GET  /api/publish/youtube                 (conta conectada?)
+    POST /api/publish/youtube/connect         abre o OAuth no navegador
+    POST /api/publish/youtube/disconnect
+    GET  /api/videos/<id>/publish             (defaults do metadata + histórico)
+    POST /api/videos/<id>/publish/youtube     {title, description, tags, privacy,
+                                               publish_at, force}  upload (job, SSE)
+    GET  /api/videos/<id>/retention           (análise salva da curva de retenção)
+    POST /api/videos/<id>/retention           busca a curva no YouTube agora
+    POST /api/open-url                        {url}  só links do YouTube
     GET  /api/jobs/<job_id>/events        (SSE)
     GET  /api/videos/<id>/events          (SSE, that video's current job)
 """
@@ -29,6 +42,8 @@ import json
 from typing import Iterator
 
 from auto_edit import engine
+from auto_edit import shorts as sh
+from auto_edit.publish import youtube as yt
 
 
 def _sse(events: Iterator[dict]) -> Iterator[str]:
@@ -68,7 +83,9 @@ def create_app(jobs: engine.JobManager | None = None):
         return jsonify(
             {
                 "videos": engine.list_library(
-                    active_ids=jobs.active_ids(), failed_ids=jobs.failed_ids()
+                    active_ids=jobs.active_ids(),
+                    failed_ids=jobs.failed_ids(),
+                    queued_ids=jobs.queued_ids(),
                 )
             }
         )
@@ -84,6 +101,7 @@ def create_app(jobs: engine.JobManager | None = None):
             video_id,
             active=video_id in jobs.active_ids(),
             failed=video_id in jobs.failed_ids(),
+            queued=video_id in jobs.queued_ids(),
         )
         if data is None:
             return jsonify({"error": "not_found", "id": video_id}), 404
@@ -130,6 +148,15 @@ def create_app(jobs: engine.JobManager | None = None):
             download_name=path.name,
         )
 
+    @app.post("/api/videos/<video_id>/open/<kind>")
+    def open_file(video_id: str, kind: str):
+        """Open an artifact on this machine (default app, or `reveal` in the folder)."""
+        body = request.get_json(silent=True) or {}
+        path = engine.open_artifact(video_id, kind, reveal=bool(body.get("reveal")))
+        if path is None:
+            return jsonify({"error": "not_found", "id": video_id, "kind": kind}), 404
+        return jsonify({"opened": str(path)})
+
     @app.post("/api/edit")
     def start_edit():
         body = request.get_json(silent=True) or {}
@@ -146,6 +173,8 @@ def create_app(jobs: engine.JobManager | None = None):
                 language=body.get("language", "pt"),
                 max_iterations=int(body.get("max_iterations", 3)),
                 dry_run=bool(body.get("dry_run", False)),
+                cold_open=bool(body.get("cold_open", False)),
+                reorder=bool(body.get("reorder", False)),
                 overlays_dir=body.get("overlays_dir"),
             )
         except FileNotFoundError as exc:
@@ -165,6 +194,128 @@ def create_app(jobs: engine.JobManager | None = None):
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
         return jsonify({"job_id": job.id, "video_id": job.video_id}), 202
+
+    def _max_dur(raw) -> float:
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            return sh.DEFAULT_MAX_DURATION
+        return value if value > 0 else sh.DEFAULT_MAX_DURATION
+
+    @app.get("/api/videos/<video_id>/shorts")
+    def shorts_state(video_id: str):
+        data = engine.shorts_state(video_id, max_duration=_max_dur(request.args.get("max_dur")))
+        if data is None:
+            return jsonify({"error": "not_found", "id": video_id}), 404
+        job = jobs.job_for_video(video_id)
+        if job is not None and job.kind == "shorts":
+            data["job"] = {"id": job.id, "status": job.status}
+        return jsonify(data)
+
+    @app.post("/api/videos/<video_id>/shorts")
+    def find_shorts(video_id: str):
+        body = request.get_json(silent=True) or {}
+        try:
+            job = jobs.find_shorts(video_id, max_duration=_max_dur(body.get("max_dur")))
+        except FileNotFoundError as exc:
+            return jsonify({"error": str(exc)}), 404
+        except sh.ShortsError as exc:
+            return jsonify({"error": str(exc)}), 400
+        return jsonify({"job_id": job.id, "video_id": job.video_id}), 202
+
+    @app.post("/api/videos/<video_id>/shorts/cut")
+    def cut_shorts(video_id: str):
+        body = request.get_json(silent=True) or {}
+        pick = body.get("pick")
+        if not isinstance(pick, list):
+            return jsonify({"error": "pick precisa ser uma lista, ex: [1, 3]"}), 400
+        try:
+            ids = jobs.cut_shorts(video_id, pick, max_duration=_max_dur(body.get("max_dur")))
+        except FileNotFoundError as exc:
+            return jsonify({"error": str(exc)}), 404
+        except (sh.ShortsError, ValueError) as exc:
+            return jsonify({"error": str(exc)}), 400
+        return jsonify({"shorts": ids}), 202
+
+    @app.get("/api/publish/youtube")
+    def youtube_account():
+        return jsonify(engine.youtube_account())
+
+    @app.post("/api/publish/youtube/connect")
+    def youtube_connect():
+        return jsonify(engine.connect_youtube()), 202
+
+    @app.post("/api/publish/youtube/disconnect")
+    def youtube_disconnect():
+        return jsonify(engine.disconnect_youtube())
+
+    @app.get("/api/videos/<video_id>/publish")
+    def publish_state(video_id: str):
+        data = engine.publish_state(video_id)
+        if data is None:
+            return jsonify({"error": "not_found", "id": video_id}), 404
+        job = jobs.job_for_video(video_id)
+        if job is not None and job.kind == "publish":
+            data["job"] = {"id": job.id, "status": job.status}
+        return jsonify(data)
+
+    @app.post("/api/videos/<video_id>/publish/youtube")
+    def publish_youtube(video_id: str):
+        body = request.get_json(silent=True) or {}
+        force = bool(body.get("force"))
+        state = engine.publish_state(video_id)
+        if state is None:
+            return jsonify({"error": "not_found", "id": video_id}), 404
+        if state["published"] and not force:
+            return jsonify({"error": "este vídeo já foi enviado pro YouTube", "published": state["published"]}), 409
+        tags = body.get("tags") or []
+        if isinstance(tags, str):
+            tags = [t for t in tags.split(",")]
+        try:
+            job = jobs.publish_youtube(
+                video_id,
+                {
+                    "title": body.get("title", ""),
+                    "description": body.get("description", ""),
+                    "tags": tags,
+                    "privacy": body.get("privacy", "private"),
+                    "publish_at": body.get("publish_at"),
+                    "captions": body.get("captions", True),
+                    "comment": body.get("comment"),
+                },
+                force=force,
+            )
+        except FileNotFoundError as exc:
+            return jsonify({"error": str(exc)}), 404
+        except yt.PublishError as exc:
+            return jsonify({"error": str(exc)}), 400
+        return jsonify({"job_id": job.id, "video_id": job.video_id}), 202
+
+    @app.get("/api/videos/<video_id>/retention")
+    def retention_state(video_id: str):
+        data = engine.retention_state(video_id)
+        if data is None:
+            return jsonify({"error": "not_found", "id": video_id}), 404
+        return jsonify(data)
+
+    @app.post("/api/videos/<video_id>/retention")
+    def refresh_retention(video_id: str):
+        from auto_edit import retention as ret
+        from auto_edit import youtube_auth
+
+        try:
+            return jsonify(engine.refresh_retention(video_id))
+        except FileNotFoundError as exc:
+            return jsonify({"error": str(exc)}), 404
+        except (ret.RetentionError, youtube_auth.AuthError) as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    @app.post("/api/open-url")
+    def open_url():
+        body = request.get_json(silent=True) or {}
+        if not engine.open_url(body.get("url")):
+            return jsonify({"error": "só links do YouTube"}), 400
+        return jsonify({"opened": body["url"]})
 
     @app.get("/api/jobs/<job_id>/events")
     def job_events(job_id: str):

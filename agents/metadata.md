@@ -15,6 +15,29 @@ Your job is to generate compelling titles and descriptions optimized for the pla
 - `youtube_title`: Max 70 characters. SEO-optimized. Include the main keyword. In the video's language.
 - `youtube_description`: 150–300 words. First 2 sentences are the hook (most important for SEO). Include natural keyword usage. Add a call to action at the end. In the video's language.
 - `tags`: Array of 10–20 tags for YouTube. Mix keyword variations.
+- `chapters`: YouTube chapters, from the timestamped transcription. Array of
+  `{"start": <seconds>, "title": "..."}` in the order they happen.
+  - First chapter at `0`. **At least 3**, each **at least 10 seconds** long —
+    otherwise YouTube shows no chapters at all.
+  - One chapter per real topic shift (what the viewer would want to jump to:
+    the demo, the setup, a comparison, the result). Typically 4–8 for a
+    5–15 min video; never one per sentence.
+  - `start` is where the topic begins in the transcription (`[m:ss]` → seconds).
+  - Titles: 2–6 words, concrete, in the video's language. Name what happens
+    ("Instalando o firmware", "Teste de bateria"), not "Parte 2" or "Introdução"
+    when something more specific fits.
+
+## Pinned Comment (both types)
+
+- `pinned_comment`: the comment the creator pins right after publishing, to
+  start the conversation (the first viewers see it and answer). One or two
+  sentences, max 200 chars, in the video's language.
+  - A **specific question** about THIS video that is easy to answer in a few
+    words: an opinion, a choice between two options, their own experience.
+    ✅ "Você usaria isso pelo app ou continua no terminal?" ·
+    ✅ "Qual placa você colocaria nesse projeto: ESP32 ou Raspberry?"
+    ❌ "O que acharam do vídeo?" · ❌ "Deixa seu like!" · ❌ "Comenta aí!"
+  - No links, no hashtags, no "inscreva-se". At most one emoji.
 
 ## Thumbnail Text
 
@@ -52,6 +75,7 @@ Schema for short:
   "short_title": "...",
   "hook": "...",
   "hashtags": ["receita", "paocaseiro", ...],
+  "pinned_comment": "Você faria esse pão com fermento natural ou biológico?",
   "thumbnail": {
     "main_text": "PEÇA 3D QUEBROU",
     "sub_text": "E A IA RESOLVEU?",
@@ -64,6 +88,12 @@ Schema for long:
   "youtube_title": "...",
   "youtube_description": "...",
   "tags": ["pão caseiro", "como fazer pão", ...],
+  "pinned_comment": "Qual erro de fermentação você já cometeu?",
+  "chapters": [
+    {"start": 0, "title": "O pão que não cresce"},
+    {"start": 42, "title": "Fermentação lenta"},
+    {"start": 185, "title": "Forno e resultado"}
+  ],
   "thumbnail": {
     "main_text": "META AI RAY-BAN GEN 2",
     "sub_text": "VALE OS R$1500?",

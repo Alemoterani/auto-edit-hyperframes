@@ -17,6 +17,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from auto_edit import opening
 from auto_edit import pipeline as pl
 from auto_edit import snap
 
@@ -127,6 +128,15 @@ def build_prompt(stage: str, workspace: Path, prompt_file: Path) -> str:
                 '- Remove redundancy and sluggish transitions; keep intentional rhetorical pauses only.\n'
                 '- Avoid a “podcast slow” cadence unless the content demands it.'
             )
+        learned = _retention_lessons(workspace, video_type)
+        if learned:
+            sections += [
+                "\n## Onde o público saiu nos teus vídeos recentes (sinal, não regra)",
+                "Quedas acima do normal na curva de retenção do YouTube, com o que era dito "
+                "naquele trecho (`[tipo]` = preâmbulo detectado). Se este vídeo tiver trechos "
+                "do mesmo tipo, encurte ou corte; não corte conteúdo bom só por parecer.",
+                learned,
+            ]
         levels = _audio_levels_brief(transcription)
         if levels:
             sections.append(levels)
@@ -203,6 +213,10 @@ def build_prompt(stage: str, workspace: Path, prompt_file: Path) -> str:
                 "Timestamps are on the FINAL timeline. A segment marked "
                 '`"partial": true` was cut through by the edit — judge whether it still reads whole.',
                 _compact_json(_slim_for_review(post_cut_transcript)),
+                "\n## Abertura do vídeo editado (medido, não opinião)",
+                "Falas dos primeiros segundos; `← preâmbulo` marca saudação, apresentação, "
+                "anúncio do vídeo, 'bora lá', logística de gravação ou pedido de inscrição.",
+                opening.format_report(opening.report(post_cut_transcript)),
             ]
         else:
             sections += [
@@ -241,6 +255,19 @@ def build_prompt(stage: str, workspace: Path, prompt_file: Path) -> str:
             _compact_json(_slim_for_plan(post_cut)),
         ]
 
+    elif stage == "coldopen":
+        transcription = _read_json(workspace / "transcription.json")
+        plan = _read_json_optional(workspace / "reviewed_plan.json") or {}
+        sections += [
+            "\n## Video Information",
+            f"- Type: {video_type}",
+            f"- Context: {context or '(no context provided)'}",
+            f"- Cold open (teaser) wanted: {'yes' if pipeline.get('cold_open') else 'no — return teaser null'}",
+            f"- Reordering allowed: {'yes' if pipeline.get('reorder') else 'no'}",
+            "\n## What the edit kept ([start–end] on the source timeline)",
+            _kept_lines(transcription, plan),
+        ]
+
     elif stage == "metadata":
         # Use post-cut transcription if available, else original
         transcript = (
@@ -248,15 +275,24 @@ def build_prompt(stage: str, workspace: Path, prompt_file: Path) -> str:
             or _read_json(workspace / "transcription.json")
         )
         language = pipeline.get("language", "pt")
-        text = _slim_for_metadata(transcript)
         sections += [
             "\n## Video Information",
             f"- Type: {video_type}",
             f"- Context: {context or '(no context provided)'}",
             f"- Language: {language}",
-            "\n## Final Video Transcription (text only)",
-            text,
         ]
+        if video_type == "long":
+            # Long gets timestamps so the agent can mark YouTube chapters.
+            sections += [
+                f"- Duration: {_mmss(float(transcript.get('duration') or 0))}",
+                "\n## Final Video Transcription ([m:ss] = start of each line in the edited video)",
+                _timed_for_metadata(transcript),
+            ]
+        else:
+            sections += [
+                "\n## Final Video Transcription (text only)",
+                _slim_for_metadata(transcript),
+            ]
         brief = _performance_section(video_type)
         if brief:
             sections += [
@@ -286,6 +322,18 @@ def _read_json_optional(path: Path) -> dict | None:
     if not path.exists():
         return None
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _retention_lessons(workspace: Path, video_type: str) -> str:
+    """Where viewers left in this channel's recent videos of this type
+    (retention.json next to this workspace). "" when there is none — never
+    breaks the edit."""
+    try:
+        from auto_edit import retention
+
+        return retention.lessons(workspace.parent, "short" if video_type == "short" else "long")
+    except Exception:
+        return ""
 
 
 def _performance_section(video_type: str) -> str:
@@ -367,9 +415,45 @@ def _slim_for_overlay(t: dict) -> dict:
     }
 
 
+def _kept_lines(t: dict, plan: dict) -> str:
+    """`[start–end] text` for each transcript line inside a kept segment,
+    clipped to it — the material a cold open can be picked from."""
+    kept = []
+    for seg in plan.get("kept_segments") or []:
+        try:
+            kept.append((float(seg["start"]), float(seg["end"])))
+        except (KeyError, TypeError, ValueError):
+            continue
+    lines = []
+    for seg in t.get("segments", []):
+        text = (seg.get("text") or "").strip()
+        if not text:
+            continue
+        for ks, ke in kept:
+            lo, hi = max(float(seg["start"]), ks), min(float(seg["end"]), ke)
+            if hi - lo > 0.3:
+                lines.append(f"[{lo:.1f}–{hi:.1f}] {text}")
+                break
+    return "\n".join(lines)
+
+
 def _slim_for_metadata(t: dict) -> str:
     """Plain text transcript -- no timestamps, no JSON."""
     return " ".join(s["text"].strip() for s in t.get("segments", []) if s.get("text"))
+
+
+def _mmss(seconds: float) -> str:
+    s = int(seconds)
+    return f"{s // 60}:{s % 60:02d}"
+
+
+def _timed_for_metadata(t: dict) -> str:
+    """One `[m:ss] text` line per segment -- what chapters are marked against."""
+    return "\n".join(
+        f"[{_mmss(float(s.get('start') or 0))}] {s['text'].strip()}"
+        for s in t.get("segments", [])
+        if s.get("text") and s["text"].strip()
+    )
 
 
 # -- Compact JSON serialization ------------------------------------------------

@@ -11,12 +11,28 @@ auto-edit short video.mp4 --context "review de produto tech"
 # Editar long (horizontal, sem legendas, com overlays)
 auto-edit long video.mp4 --context "tutorial de Python"
 
+# Cold open: abre com o melhor momento do vídeo (teaser) antes da abertura normal
+auto-edit long video.mp4 -c "..." --cold-open
+# Reordenar: o agente pode mudar a ordem dos blocos (ex.: demo antes da explicação)
+auto-edit long video.mp4 -c "..." --reorder
+
 # Batch (vários vídeos)
 auto-edit batch upload/ --type short --context "vlogs de viagem"
 
 # Shorts a partir de um long já editado
 auto-edit shorts video.mp4              # propõe candidatos
 auto-edit shorts video.mp4 --pick 1,3   # corta os escolhidos
+
+# Publicar no YouTube (vídeo final + thumbnail + metadata)
+auto-edit publish auth youtube                       # conecta o canal (uma vez)
+auto-edit publish youtube video.mp4 --privacy unlisted
+auto-edit publish youtube video.mp4 --publish-at 2026-10-10T18:00:00-03:00
+# long: legenda (.srt da transcrição) vai junto por padrão (--no-captions desliga);
+# --comment posta o comentário pra fixar (vídeo privado não aceita; fixar é no Studio)
+
+# Retenção: onde o público saiu, com o que era dito (YouTube Analytics)
+auto-edit insights retention video.mp4      # salva retention.json; o planner usa nos próximos
+auto-edit insights retention --all
 
 # Status / Resume / Doctor
 auto-edit status video.mp4
@@ -43,6 +59,24 @@ Whisper   Claude  Claude   FFmpeg   FFmpeg    FFmpeg    Claude     Claude
 O resumo da curadoria aparece em `auto-edit status <video>` e no `--dry-run`.
 
 Se o evaluator rejeitar, o pipeline volta ao `plan` com feedback (até 3 iterações).
+
+### Ordem de reprodução (cold open / reordenação)
+
+O plano diz **o que fica** (`kept_segments`, sempre cronológico). O campo
+opcional `sequence` diz **em que ordem tocar**: janelas no tempo do original,
+recortadas pelo que foi mantido (nunca traz de volta um corte). Blocos cobrem
+tudo que ficou sem se sobrepor; teasers (`role: "teaser"`, 2–15s, até 20s no
+total) tocam a mais e o trecho toca de novo no lugar. Sequência inválida é
+ignorada e o vídeo sai cronológico. Lógica em `auto_edit/sequence.py`.
+
+Com `--reorder`, o mesmo agente também pode propor a ordem dos blocos; os
+blocos são normalizados numa partição do vídeo (sem buraco nem sobreposição)
+e só valem se de fato mudarem a ordem. Se a nova ordem já abre no trecho do
+teaser, o teaser é descartado (não toca a mesma coisa duas vezes).
+
+Com `--cold-open` (ou o checkbox no app), o agente `agents/cold_open.md` roda
+no `execute`, antes do executor, e escolhe o teaser. Se ele pular, falhar ou o
+teaser não passar nas regras, o vídeo sai sem cold open — nunca falha o stage.
 
 ### Shorts derivados
 
@@ -93,7 +127,8 @@ decrescente e marca os candidatos que se sobrepõem.
 | `AUTO_EDIT_OVERLAYS_STRICT` | — | `1` faz o stage `overlay` falhar quando um overlay planejado não é encontrado. Por padrão ele só avisa e renderiza sem — os MP4s são de cada pessoa e ficam fora do repo |
 | `AUTO_EDIT_SEGMENT_THRESHOLD` | `12` | Acima de N segmentos, o `execute` corta um-a-um + concat (evita OOM do FFmpeg em vídeo longo/4K) |
 | `GEMINI_API_KEY` | — | API key para correção de texto via Gemini |
-| `AUTO_EDIT_YT_CLIENT_SECRET` | — | Caminho do JSON de OAuth client (Desktop) do Google Cloud, pro `auto-edit insights auth youtube` |
+| `AUTO_EDIT_YT_CLIENT_SECRET` | — | Caminho do JSON de OAuth client (Desktop) do Google Cloud, pro `auto-edit insights auth youtube` e `auto-edit publish auth youtube`. Sem ele, reaproveita o client de um token já salvo. Publish e insights usam **uma conexão só** (`auto_edit/youtube_auth.py`, `tokens/youtube.json`). App OAuth em modo "Testing" expira o token em 7 dias: publique o app ("In production") pra não expirar |
+| `AUTO_EDIT_YT_CATEGORY` | `28` | Categoria do YouTube nos uploads do `publish` (28 = Ciência e tecnologia) |
 | `AUTO_EDIT_WORKSPACE` | `workspace` | Pasta raiz que guarda os workspaces por vídeo (CLI, MCP e motor headless) |
 
 ## Slash Commands Disponíveis
@@ -141,7 +176,15 @@ GET  /api/videos/<id>/result      # metadata + arquivos finais
 GET  /api/videos/<id>/file/<kind> # video | thumbnail | captions | notes
 POST /api/edit                    # {video_path, type, context, language, overlays_dir, ...}
 POST /api/videos/<id>/resume      # {from_stage}
-GET  /api/jobs/<job_id>/events    # progresso ao vivo (SSE: log/stage/done/error)
+GET  /api/videos/<id>/shorts      # candidatos a short de um long pronto
+POST /api/videos/<id>/shorts      # {max_dur} roda o clipper (job + SSE)
+POST /api/videos/<id>/shorts/cut  # {pick: [1, 3]} semeia os _shortN e corta em fila
+GET  /api/publish/youtube         # conta conectada? (POST .../connect abre o OAuth)
+GET  /api/videos/<id>/publish     # defaults do metadata + histórico (publish.json)
+POST /api/videos/<id>/publish/youtube  # {title, description, tags, privacy, publish_at, force}
+POST /api/videos/<id>/open/<kind> # abre no app padrão / {reveal} no Finder
+GET  /api/videos/<id>/retention   # análise salva (POST busca a curva no YouTube)
+GET  /api/jobs/<job_id>/events    # progresso ao vivo (SSE: log/stage/progress/done/error)
 GET  /api/videos/<id>/events      # SSE do job atual daquele vídeo
 ```
 

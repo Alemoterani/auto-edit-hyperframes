@@ -13,6 +13,7 @@ from typing import Optional
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from auto_edit import pipeline as pl
@@ -22,6 +23,7 @@ from auto_edit import shorts as sh
 from auto_edit._version import __version__
 from auto_edit.ideas import ideas_app
 from auto_edit.insights import insights_app
+from auto_edit.publish.cli import publish_app
 from auto_edit.plan import plan_app
 from auto_edit.workspace import get_workspace, init_workspace, get_status_table
 
@@ -42,6 +44,7 @@ app = typer.Typer(
 app.add_typer(plan_app, name="plan")
 app.add_typer(ideas_app, name="ideas")
 app.add_typer(insights_app, name="insights")
+app.add_typer(publish_app, name="publish")
 
 
 @app.callback(invoke_without_command=True)
@@ -200,6 +203,8 @@ def _run_pipeline(
     dry_run: bool = False,
     language: str = "pt",
     plan_id: Optional[str] = None,
+    cold_open: bool = False,
+    reorder: bool = False,
 ) -> None:
     if not video.exists():
         console.print(f"[red]Error:[/red] File not found: {video}")
@@ -226,8 +231,16 @@ def _run_pipeline(
             plan_id=plan_id,
         )
 
+    if cold_open:
+        pl.set_cold_open(ws)
+    if reorder:
+        pl.set_reorder(ws)
     console.print(f"[cyan]Type:[/cyan] {video_type}")
     console.print(f"[cyan]Context:[/cyan] {context or '(none)'}")
+    if pl.load(ws).get("cold_open"):
+        console.print("[cyan]Cold open:[/cyan] sim (o melhor momento abre o vídeo)")
+    if pl.load(ws).get("reorder"):
+        console.print("[cyan]Reordenação:[/cyan] sim (o agente pode mudar a ordem dos blocos)")
     console.print(f"[cyan]Whisper model:[/cyan] {whisper_model}")
     console.print(f"[cyan]Language:[/cyan] {language}")
     console.print(f"[cyan]Workspace:[/cyan] {ws}")
@@ -291,6 +304,8 @@ def short(
     language: str = typer.Option("pt", "--language", "-l", help="Audio language (pt, en, es, etc.)"),
     plan_id: Optional[str] = typer.Option(None, "--plan-id", help="Link this video to a plan slot (e.g. 'S2' or '2026-W19/S2'). Use 'none' to skip prompt."),
     no_plan_prompt: bool = typer.Option(False, "--no-plan-prompt", help="Don't prompt for a plan slot when --plan-id is omitted."),
+    cold_open: bool = typer.Option(False, "--cold-open", help="Abre o vídeo com o melhor momento (teaser) antes da abertura normal."),
+    reorder: bool = typer.Option(False, "--reorder", help="Deixa o agente mudar a ordem dos blocos (ex.: demo antes da explicação)."),
 ) -> None:
     """Edit a short-form video (adds captions, generates Reels/Shorts metadata)."""
     if whisper_model not in VALID_MODELS:
@@ -315,6 +330,8 @@ def short(
         dry_run=dry_run,
         language=language,
         plan_id=pid,
+        cold_open=cold_open,
+        reorder=reorder,
     )
 
 
@@ -344,6 +361,8 @@ def long(
         "--overlays-dir",
         help="Folder holding the overlay .mp4s (sets AUTO_EDIT_ASSETS_OVERLAYS).",
     ),
+    cold_open: bool = typer.Option(False, "--cold-open", help="Abre o vídeo com o melhor momento (teaser) antes da abertura normal."),
+    reorder: bool = typer.Option(False, "--reorder", help="Deixa o agente mudar a ordem dos blocos (ex.: demo antes da explicação)."),
 ) -> None:
     """Edit a long-form video (no captions, generates YouTube metadata)."""
     if whisper_model not in VALID_MODELS:
@@ -365,6 +384,8 @@ def long(
         dry_run=dry_run,
         language=language,
         plan_id=pid,
+        cold_open=cold_open,
+        reorder=reorder,
     )
 
 
@@ -1260,7 +1281,8 @@ def serve(
     try:
         app_ = create_app()
     except RuntimeError as exc:
-        console.print(f"[red]{exc}[/red]")
+        # escape: the hint names the `[api]` extra, which Rich would eat as markup
+        console.print(f"[red]{escape(str(exc))}[/red]")
         raise typer.Exit(1)
     console.print(f"[cyan]auto-edit API[/cyan] → http://{host}:{port}  [dim](Ctrl+C to stop)[/dim]")
     console.print(f"[dim]Library root:[/dim] {(Path.cwd() / 'workspace')}")

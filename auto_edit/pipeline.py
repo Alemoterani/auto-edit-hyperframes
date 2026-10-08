@@ -94,6 +94,13 @@ def set_cold_open(workspace: Path, enabled: bool = True) -> None:
     save(workspace, p)
 
 
+def set_option(workspace: Path, key: str, value) -> None:
+    """Store a run option (e.g. "script", "video_filter") in pipeline.json; kept across `resume`."""
+    p = load(workspace)
+    p[key] = value
+    save(workspace, p)
+
+
 def set_graphics(workspace: Path, enabled: bool = True) -> None:
     """Shorts: run the overlay stage with the explainer templates (kept across `resume`).
 

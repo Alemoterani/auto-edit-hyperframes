@@ -32,11 +32,18 @@ Use these to *show* what the speaker is explaining. Only use data that is actual
 
 Pacing: at most one explainer every ~30s, and never two overlays on screen at once. Prefer the explainer that matches the *shape* of what is said: a list → `steps`, one number → `stat`, two sides → `compare`, several numbers → `chart`, a command → `code`.
 
+### Story templates — follow the narration
+
+- **chapter** — `vars: {"kicker", "title"}` e.g. `{"kicker": "Ato 1", "title": "A promessa"}`. A new part of the story starts. Place it on the first words of that part; `duration` 2.5–3.5. Titles ≤ 22 chars.
+- **quote** — `vars: {"text", "author"}`. A line a character in the story says, or the key sentence of the video, quoted **exactly** as spoken (≤ 90 chars). Place it as the speaker starts saying it; `duration` ≈ how long the line takes + 1.5s (4–7).
+
+When a **Script (roteiro)** section is provided, use it as the map of the story: put a `chapter` at the start of each part (gancho/ato/fechamento) that is in the transcription, and between chapters illustrate how the story evolves with `quote`, `compare`, `steps` and `stat`, so the graphics move with the narration from beginning to end. Name chapters by what happens in them (from the script's headings), not just "Parte 2".
+
 Optional `"accent": "#RRGGBB"` in `vars` changes the color.
 
 ### Shorts (Type: short)
 
-Shorts are vertical and have captions at the bottom. Use **only** the explainer templates (`steps`, `stat`, `compare`, `code`, `chart`) — no `file` entries, no `lower_third`, `cta` or `highlight` (anything else is dropped). Shorts are fast: at most one explainer every ~20s, and only where it genuinely helps the viewer understand. Returning `{"overlays": []}` is fine when nothing fits.
+Shorts are vertical and have captions at the bottom. Use **only** the explainer and story templates (`steps`, `stat`, `compare`, `code`, `chart`, `chapter`, `quote`) — no `file` entries, no `lower_third`, `cta` or `highlight` (anything else is dropped). Leave ≥ 1s between overlays. Without a script: at most one explainer every ~20s, only where it genuinely helps the viewer understand. With a script: chapters at each part plus one illustrating graphic per part is a good density. Returning `{"overlays": []}` is fine when nothing fits.
 
 ## Rules
 

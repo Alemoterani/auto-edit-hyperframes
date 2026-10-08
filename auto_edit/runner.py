@@ -190,6 +190,14 @@ def build_prompt(stage: str, workspace: Path, prompt_file: Path) -> str:
             "\n## Transcription Data (word timestamps)",
             _compact_json(_slim_for_overlay(transcription)),
         ]
+        if pipeline.get("script"):
+            sections += [
+                "\n## Script (roteiro) — the narrative structure the speaker followed",
+                "Use it to find where each part/act starts in the transcription and to "
+                "quote lines exactly. The speaker may have cut or reworded parts: only place "
+                "graphics on moments that are actually in the transcription.",
+                pipeline["script"],
+            ]
 
     elif stage == "evaluate":
         post_cut_transcript = _read_json_optional(workspace / "post_cut_transcription.json")

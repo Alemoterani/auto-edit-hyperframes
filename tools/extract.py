@@ -78,6 +78,19 @@ def extract(workspace: Path) -> None:
     # 5. Correção da transcrição com Claude (corrige alucinações e erros do Whisper)
     words, segments = _correct_transcription(words, segments, context, language)
 
+    # 5b. Roteiro (--script): grafia do roteiro onde a fala bate com ele (local, sem tokens)
+    if pipeline.get("script"):
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from auto_edit import script_align
+        changed = script_align.align(words, pipeline["script"])
+        by_time = {(w["start"], w["end"]): w["word"] for w in words}
+        for seg in segments:
+            for sw in seg.get("words", []):
+                sw["word"] = by_time.get((sw["start"], sw["end"]), sw["word"])
+            if seg.get("words"):
+                seg["text"] = " ".join(sw["word"] for sw in seg["words"])
+        print(f"[extract] Script alignment: {changed} word(s) corrected from the roteiro")
+
     # 6. Montar transcription.json
     transcription = {
         "duration": round(duration, 3),

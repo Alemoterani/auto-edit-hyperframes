@@ -18,7 +18,7 @@ def test_patch_root_rewrites_size_and_duration_once():
 
 
 def test_every_shipped_template_resolves():
-    for name in ("lower_third", "cta", "highlight", "steps", "stat", "compare", "code", "chart", "captions"):
+    for name in ("lower_third", "cta", "highlight", "steps", "stat", "compare", "code", "chart", "chapter", "quote", "captions"):
         assert (hyperframes.template_dir(name) / "index.html").is_file()
 
 

@@ -1,0 +1,54 @@
+<!doctype html>
+<!-- Quote: a line someone in the story says, shown as a pull quote with who said it.
+     Data: window.AE_DATA = {text, author, accent} (written by auto_edit/hyperframes.py).
+     Landscape: card on the right (keeps the face clear). Portrait: card on top (keeps captions clear).
+     Root size/duration are rewritten per render to match the edited video. -->
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,600;0,800;0,900;1,700&display=block" />
+    <script src="data.js"></script>
+    <style>
+      html, body { margin: 0; background: transparent; }
+      #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; font-family: Montserrat, "Segoe UI", Arial, sans-serif; }
+      #wrap { position: absolute; inset: 0; display: flex; box-sizing: border-box; }
+      @media (min-aspect-ratio: 1/1) { #wrap { align-items: center; justify-content: flex-end; padding-right: 4%; } #card { width: 44%; } }
+      @media (max-aspect-ratio: 1/1) { #wrap { align-items: flex-start; justify-content: center; padding-top: 9%; } #card { width: 86%; } }
+      #card { position: relative; box-sizing: border-box; padding: 3.4vmin 3.6vmin 3vmin 4.4vmin; border-radius: 2vmin; background: rgba(12, 12, 16, 0.86); box-shadow: 0 1.2vmin 4vmin rgba(0, 0, 0, 0.45); color: #fff; border-left: 0.8vmin solid var(--accent); }
+      #mark { position: absolute; top: -3.6vmin; left: 2.4vmin; font-weight: 900; font-size: 13vmin; line-height: 1; color: var(--accent); }
+      #text { font-style: italic; font-weight: 700; font-size: 4vmin; line-height: 1.25; }
+      .w { display: inline-block; margin-right: 0.28em; }
+      #author { margin-top: 2vmin; font-weight: 800; font-size: 2.6vmin; color: var(--accent); letter-spacing: 0.06em; text-transform: uppercase; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="5" data-width="1920" data-height="1080">
+      <div id="wrap"><section id="card" class="clip" data-start="0" data-duration="5"><div id="mark">“</div><div id="text"></div><div id="author"></div></section></div>
+    </div>
+    <script>
+      const d = Object.assign({ text: "Todo mundo vai ter pão, e o pão vai ser de graça.", author: "O novo gerente", accent: "#FFB800" }, window.AE_DATA || {});
+      document.documentElement.style.setProperty("--accent", d.accent);
+      const words = String(d.text).split(/\s+/).filter(Boolean).map((t) => {
+        const w = document.createElement("span");
+        w.className = "w";
+        w.textContent = t;
+        document.getElementById("text").appendChild(w);
+        return w;
+      });
+      if (d.author) document.getElementById("author").textContent = "— " + d.author; else document.getElementById("author").remove();
+
+      const total = parseFloat(document.getElementById("root").dataset.duration);
+      // Words land one by one over ~40% of the slot, roughly in step with the speech.
+      const step = Math.min(0.18, (total * 0.4) / Math.max(1, words.length));
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo("#card", { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 0)
+        .fromTo("#mark", { scale: 0, rotation: -20 }, { scale: 1, rotation: 0, duration: 0.45, ease: "back.out(2.2)" }, 0.1)
+        .fromTo(words, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.25, stagger: step }, 0.3);
+      if (d.author) tl.fromTo("#author", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 0.3 + step * words.length);
+      tl.to("#card", { opacity: 0, y: -30, duration: 0.35, ease: "power2.in" }, Math.max(1.5, total - 0.4));
+      window.__timelines = window.__timelines || {};
+      window.__timelines.main = tl;
+    </script>
+  </body>
+</html>

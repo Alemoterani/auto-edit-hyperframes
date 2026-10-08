@@ -146,7 +146,7 @@ ALPHA_SUFFIXES = (".mov", ".webm")
 # Shorts (vertical, captions at the bottom) only take the explainer templates:
 # they sit at the top. lower_third/cta sit at the bottom under the captions, and
 # 16:9 green-screen MP4s would be letterboxed with opaque black bars.
-SHORT_TEMPLATES = {"steps", "stat", "compare", "code", "chart"}
+SHORT_TEMPLATES = {"steps", "stat", "compare", "code", "chart", "chapter", "quote"}
 
 
 def _filter_for_short(overlays: list[dict], video_type: str) -> tuple[list[dict], list[str]]:

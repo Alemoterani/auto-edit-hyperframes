@@ -213,9 +213,18 @@ def _run_pipeline(
     cold_open: bool = False,
     reorder: bool = False,
     graphics: bool = False,
+    look: Optional[str] = None,
+    script: Optional[Path] = None,
 ) -> None:
     if not video.exists():
         console.print(f"[red]Error:[/red] File not found: {video}")
+        raise typer.Exit(1)
+    from auto_edit.looks import LOOKS
+    if look and look not in LOOKS:
+        console.print(f"[red]Invalid --look.[/red] Choose from: {', '.join(LOOKS)}")
+        raise typer.Exit(1)
+    if script and not script.is_file():
+        console.print(f"[red]Error:[/red] Script not found: {script}")
         raise typer.Exit(1)
 
     ws = get_workspace(video, plan_id=plan_id)
@@ -243,12 +252,20 @@ def _run_pipeline(
         pl.set_cold_open(ws)
     if graphics:
         pl.set_graphics(ws)
+    if look:
+        pl.set_option(ws, "video_filter", LOOKS[look])
+    if script:
+        pl.set_option(ws, "script", script.read_text(encoding="utf-8"))
     if reorder:
         pl.set_reorder(ws)
     console.print(f"[cyan]Type:[/cyan] {video_type}")
     console.print(f"[cyan]Context:[/cyan] {context or '(none)'}")
     if pl.load(ws).get("cold_open"):
         console.print("[cyan]Cold open:[/cyan] sim (o melhor momento abre o vídeo)")
+    if look:
+        console.print(f"[cyan]Imagem:[/cyan] look {look}")
+    if pl.load(ws).get("script"):
+        console.print("[cyan]Roteiro:[/cyan] sim (legendas e gráficos guiados pelo roteiro)")
     if pl.load(ws).get("graphics"):
         console.print("[cyan]Gráficos:[/cyan] sim (motion graphics explicativos via HyperFrames)")
     if pl.load(ws).get("reorder"):
@@ -320,6 +337,8 @@ def short(
     cold_open: bool = typer.Option(False, "--cold-open", help="Abre o vídeo com o melhor momento (teaser) antes da abertura normal."),
     reorder: bool = typer.Option(False, "--reorder", help="Deixa o agente mudar a ordem dos blocos (ex.: demo antes da explicação)."),
     graphics: bool = typer.Option(False, "--graphics", help="Short: adiciona motion graphics explicativos (passos, números, antes × depois, código, gráfico) renderizados com HyperFrames."),
+    look: Optional[str] = typer.Option(None, "--look", help="Tratamento de imagem: low-light (ambiente escuro) ou studio. Melhora iluminação, ruído, pele e nitidez; sai em 1080x1920."),
+    script: Optional[Path] = typer.Option(None, "--script", help="Arquivo .txt com o roteiro: corrige a grafia das legendas onde a fala bate com ele e guia os gráficos pela narrativa."),
 ) -> None:
     """Edit a short-form video (adds captions, generates Reels/Shorts metadata)."""
     if whisper_model not in VALID_MODELS:
@@ -348,6 +367,8 @@ def short(
         cold_open=cold_open,
         reorder=reorder,
         graphics=graphics,
+        look=look,
+        script=script,
     )
 
 
@@ -379,6 +400,7 @@ def long(
     ),
     cold_open: bool = typer.Option(False, "--cold-open", help="Abre o vídeo com o melhor momento (teaser) antes da abertura normal."),
     reorder: bool = typer.Option(False, "--reorder", help="Deixa o agente mudar a ordem dos blocos (ex.: demo antes da explicação)."),
+    script: Optional[Path] = typer.Option(None, "--script", help="Arquivo .txt com o roteiro: corrige a grafia das legendas onde a fala bate com ele e guia os gráficos pela narrativa."),
 ) -> None:
     """Edit a long-form video (no captions, generates YouTube metadata)."""
     if whisper_model not in VALID_MODELS:
@@ -402,6 +424,7 @@ def long(
         plan_id=pid,
         cold_open=cold_open,
         reorder=reorder,
+        script=script,
     )
 
 

@@ -451,3 +451,71 @@ class TestFrameSource:
         video, transcription = _frame_source(tmp_path, {"video_path": "/raw/v.mp4"})
         assert video == "/raw/v.mp4"
         assert transcription["duration"] == 378.75
+
+    def test_prefers_the_clean_cut_over_the_captioned_video(self, tmp_path):
+        # Regressão: o frame vinha do vídeo legendado e a legenda saía queimada na capa.
+        for name in ("captioned_video.mp4", "overlaid_video.mp4", "edited_video.mp4"):
+            (tmp_path / name).write_bytes(b"x")
+        (tmp_path / "post_cut_transcription.json").write_text(json.dumps({"duration": 30.0}))
+        video, _ = _frame_source(tmp_path, {"video_path": "/raw/v.mp4"})
+        assert video == str(tmp_path / "edited_video.mp4")
+
+
+class TestFontCoverage:
+    """Regressão: sem fonte com Ã/Ç, "PÃO DE GRAÇA" saía com quadradinhos na capa."""
+
+    def _fonts_dir(self, tmp_path, monkeypatch, names):
+        d = tmp_path / "fonts"
+        d.mkdir()
+        for n in names:
+            (d / n).write_bytes(b"x")
+        monkeypatch.setenv("AUTO_EDIT_ASSETS_FONTS", str(d))
+        monkeypatch.setattr(thumbnailer, "_repo_root", lambda: tmp_path / "sem-repo")
+        monkeypatch.setattr(thumbnailer, "SYSTEM_FONTS", [])
+
+    def test_skips_a_preferred_font_that_lacks_the_texts_glyphs(self, tmp_path, monkeypatch):
+        self._fonts_dir(tmp_path, monkeypatch, ["Montserrat-Bold.ttf", "Zeta.ttf"])
+        monkeypatch.setattr(thumbnailer, "_covers", lambda p, t: p.name == "Zeta.ttf")
+        assert thumbnailer._find_font("PÃO DE GRAÇA").name == "Zeta.ttf"
+
+    def test_keeps_the_preferred_font_when_it_covers_the_text(self, tmp_path, monkeypatch):
+        self._fonts_dir(tmp_path, monkeypatch, ["Montserrat-Bold.ttf", "Zeta.ttf"])
+        monkeypatch.setattr(thumbnailer, "_covers", lambda p, t: True)
+        assert thumbnailer._find_font("PÃO").name == "Montserrat-Bold.ttf"
+
+    def test_none_when_no_font_covers_the_text(self, tmp_path, monkeypatch):
+        self._fonts_dir(tmp_path, monkeypatch, ["Zeta.ttf"])
+        monkeypatch.setattr(thumbnailer, "_covers", lambda p, t: False)
+        assert thumbnailer._find_font("PÃO") is None
+
+    def test_a_real_system_font_covers_portuguese_but_not_cjk(self):
+        fonts = [Path(p) for p in thumbnailer.SYSTEM_FONTS if Path(p).is_file()]
+        if not fonts:
+            pytest.skip("nenhuma fonte do sistema da lista instalada")
+        assert thumbnailer._covers(fonts[0], "PÃO DE GRAÇA? AÇÃO É")
+        assert not thumbnailer._covers(fonts[0], "漢")
+
+
+class TestAutoExposure:
+    def test_brightens_a_dark_frame(self):
+        dark = Image.fromarray(np.random.default_rng(0).integers(5, 60, (64, 64, 3), dtype=np.uint8))
+        out = thumbnailer._auto_exposure(dark)
+        assert np.asarray(out).mean() > np.asarray(dark).mean() + 40
+
+    def test_leaves_a_well_exposed_frame_alone(self):
+        ok = Image.new("RGB", (64, 64), (140, 130, 120))
+        assert thumbnailer._auto_exposure(ok) is ok
+
+
+def test_custom_thumbnail_wins_over_the_generated_one(tmp_path, monkeypatch):
+    """Regressão: a capa feita à mão era sobrescrita pela automática em todo resume."""
+    (tmp_path / "pipeline.json").write_text(json.dumps({"type": "short"}))
+    (tmp_path / "metadata.json").write_text(json.dumps({}))
+    Image.new("RGB", (8, 8), (200, 0, 0)).save(tmp_path / thumbnailer.CUSTOM_THUMBNAIL)
+    monkeypatch.setattr(thumbnailer, "_thumbnail_short", lambda *a: pytest.fail("gerou a capa automática"))
+    embedded = []
+    monkeypatch.setattr(thumbnailer, "_embed_cover_frame", lambda ws, thumb: embedded.append(thumb))
+    thumbnailer.thumbnail(tmp_path)
+    assert embedded == [tmp_path / "thumbnail.png"]
+    with Image.open(tmp_path / "thumbnail.png") as img:
+        assert img.convert("RGB").getpixel((0, 0)) == (200, 0, 0)

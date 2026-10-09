@@ -505,3 +505,17 @@ class TestAutoExposure:
     def test_leaves_a_well_exposed_frame_alone(self):
         ok = Image.new("RGB", (64, 64), (140, 130, 120))
         assert thumbnailer._auto_exposure(ok) is ok
+
+
+def test_custom_thumbnail_wins_over_the_generated_one(tmp_path, monkeypatch):
+    """Regressão: a capa feita à mão era sobrescrita pela automática em todo resume."""
+    (tmp_path / "pipeline.json").write_text(json.dumps({"type": "short"}))
+    (tmp_path / "metadata.json").write_text(json.dumps({}))
+    Image.new("RGB", (8, 8), (200, 0, 0)).save(tmp_path / thumbnailer.CUSTOM_THUMBNAIL)
+    monkeypatch.setattr(thumbnailer, "_thumbnail_short", lambda *a: pytest.fail("gerou a capa automática"))
+    embedded = []
+    monkeypatch.setattr(thumbnailer, "_embed_cover_frame", lambda ws, thumb: embedded.append(thumb))
+    thumbnailer.thumbnail(tmp_path)
+    assert embedded == [tmp_path / "thumbnail.png"]
+    with Image.open(tmp_path / "thumbnail.png") as img:
+        assert img.convert("RGB").getpixel((0, 0)) == (200, 0, 0)

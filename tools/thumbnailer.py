@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -1151,6 +1152,7 @@ def _thumbnail_long(workspace: Path, metadata: dict, pipeline: dict) -> Path:
 
 # ── Cover frame embedding ───────────────────────────────────────────────────
 
+CUSTOM_THUMBNAIL = "thumbnail_custom.png"  # capa pronta na pasta do vídeo: usada no lugar da automática
 COVER_FRAMES = 2              # still frames prepended as the cover
 COVER_MAX_DURATION = 0.35     # a leading segment shorter than this is our own cover
 COVER_TAG = "auto-edit-cover"
@@ -1392,7 +1394,14 @@ def thumbnail(workspace: Path) -> None:
 
     video_type = pipeline.get("type", "short")
 
-    if video_type == "short":
+    # Capa feita à mão (ex.: exportada de um design) tem prioridade: sem isso, todo
+    # resume regerava a automática por cima dela no thumbnail.png e no output/.
+    custom = workspace / CUSTOM_THUMBNAIL
+    if custom.is_file():
+        thumb = workspace / "thumbnail.png"
+        shutil.copy2(custom, thumb)
+        print(f"[thumbnailer] Usando a capa personalizada {CUSTOM_THUMBNAIL}")
+    elif video_type == "short":
         thumb = _thumbnail_short(workspace, metadata, pipeline)
     else:
         thumb = _thumbnail_long(workspace, metadata, pipeline)

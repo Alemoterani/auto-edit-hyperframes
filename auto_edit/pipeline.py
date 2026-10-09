@@ -114,6 +114,13 @@ def set_graphics(workspace: Path, enabled: bool = True) -> None:
     save(workspace, p)
 
 
+def set_backdrop(workspace: Path, enabled: bool = True) -> None:
+    """Troca o fundo atrás do apresentador depois do execute (mantido no `resume`)."""
+    p = load(workspace)
+    p["backdrop"] = bool(enabled)
+    save(workspace, p)
+
+
 def set_stage_status(workspace: Path, stage: str, status: str, error: str | None = None) -> dict:
     """Mark a stage as running/complete/failed and update current_stage."""
     pipeline = load(workspace)

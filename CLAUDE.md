@@ -132,6 +132,26 @@ decrescente e marca os candidatos que se sobrepõem.
 | `AUTO_EDIT_YT_CATEGORY` | `28` | Categoria do YouTube nos uploads do `publish` (28 = Ciência e tecnologia) |
 | `AUTO_EDIT_WORKSPACE` | `workspace` | Pasta raiz que guarda os workspaces por vídeo (CLI, MCP e motor headless) |
 
+## Presenter / Backdrop (fundo por assunto, 100% local)
+
+Recorta você do vídeo (Robust Video Matting ResNet50 em ONNX, GPL-3.0, 107 MB baixado 1x em `~/.auto-edit/models/`) e
+põe um cenário atrás conforme o assunto. Sem conta nem API. Requer `pip install -e ".[backdrop]"`
+(`onnxruntime-directml` no Windows usa a GPU; cai pro CPU). Você mantém a roupa que vestiu na gravação.
+
+```bash
+auto-edit presenter set --topic "finanças" --backdrop finance     # temas: finance tech education health neutral
+auto-edit presenter set --topic "viagem" --backdrop C:/fotos/praia.jpg --default neutral --thumbnail
+auto-edit presenter swap clip.mp4 -b finance -t 5                # teste rápido (5 s)
+auto-edit long video.mp4 -c "finanças pessoais" --backdrop       # no pipeline, após o execute
+auto-edit presenter status
+```
+
+Config em `~/.auto-edit/presenter.json`. Com `--backdrop` o `edited_video.mp4` é trocado (o corte original fica em
+`edited_video_original.mp4`); falha nunca derruba a edição. Combina com `--look studio|low-light`: o tratamento
+roda depois (no overlay/caption) e passa por você e pelo cenário juntos. Com `thumbnail: true`, a thumbnail do **long** usa o
+melhor frame com você recortado no fundo do assunto. Skills de agente em `.claude/skills/` (hyperframes, media-use,
+embedded-captions, talking-head-recut, motion-graphics). Não faz: trocar roupa nem clonar rosto/voz (sem GPU pra isso).
+
 ## Slash Commands Disponíveis
 
 - `/edit-video` — Guia interativo para iniciar edição

@@ -1000,6 +1000,31 @@ def _thumbnail_short(workspace: Path, metadata: dict, pipeline: dict) -> Path:
     return output
 
 
+def _presenter_bg(workspace: Path, pipeline: dict) -> Image.Image | None:
+    """Melhor quadro do vídeo com você recortado sobre o fundo do assunto, ou None se desligado/indisponível."""
+    try:
+        from auto_edit import backdrop, presenter
+        bd = presenter.thumbnail_backdrop(pipeline.get("context", ""))
+        if bd is None:
+            return None
+        video_path, transcription = _frame_source(workspace, pipeline)
+        frame_path = _pick_best_frame(video_path, transcription.get("duration", 30.0), workspace,
+                                      _find_energy_peak(transcription))
+        tmp = workspace / "presenter_bg.png"
+        try:
+            backdrop.swap_image(frame_path, bd, tmp)
+        finally:
+            frame_path.unlink(missing_ok=True)
+        with Image.open(tmp) as f:
+            img = f.convert("RGB")
+        tmp.unlink(missing_ok=True)
+        print(f"[thumbnailer] Presenter cutout over backdrop {bd.name}")
+        return img
+    except Exception as e:  # recurso opcional: nunca derruba o stage por causa dele
+        print(f"[thumbnailer] presenter skipped: {e}")
+        return None
+
+
 def _thumbnail_long(workspace: Path, metadata: dict, pipeline: dict) -> Path:
     """Generate thumbnail for long video: AI background + face + title."""
     thumb_data = metadata.get("thumbnail", {})
@@ -1017,8 +1042,11 @@ def _thumbnail_long(workspace: Path, metadata: dict, pipeline: dict) -> Path:
 
     w, h = LONG_SIZE
 
-    # Background: try Imagen → frame from video → gradient (last resort)
-    bg = _generate_imagen_bg(w, h, style_hint, context)
+    # Fundo: apresentador recortado no fundo do assunto (opcional) → Imagen → quadro do vídeo → degradê (último recurso)
+    bg = _presenter_bg(workspace, pipeline)
+    presenter_bg = bg is not None
+    if bg is None:
+        bg = _generate_imagen_bg(w, h, style_hint, context)
 
     if bg is None:
         video_path, transcription = _frame_source(workspace, pipeline)
@@ -1038,7 +1066,7 @@ def _thumbnail_long(workspace: Path, metadata: dict, pipeline: dict) -> Path:
     img = bg.convert("RGBA")
 
     # Composite face asset if available
-    face_path = _find_face_asset()
+    face_path = None if presenter_bg else _find_face_asset()  # o quadro já tem você
     has_face = False
     if face_path:
         face = Image.open(face_path).convert("RGBA")

@@ -388,6 +388,8 @@ if final:
                 fi
             fi
             run_python_tool "execute" "$TOOLS_DIR/executor.py"
+            # Opcional (--backdrop): troca o fundo atrás do apresentador. Local, nunca derruba a edição.
+            $PYTHON -m auto_edit.backdrop "$WORKSPACE" || log "WARNING: backdrop failed — keeping the original background"
             # Transcript of the edited video, so evaluate judges the cut and
             # not the raw footage.
             $PYTHON -m auto_edit.postcut "$WORKSPACE" || { log "ERROR: postcut failed"; exit 1; }

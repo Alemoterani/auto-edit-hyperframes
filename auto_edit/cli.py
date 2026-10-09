@@ -25,6 +25,7 @@ from auto_edit.ideas import ideas_app
 from auto_edit.insights import insights_app
 from auto_edit.publish.cli import publish_app
 from auto_edit.plan import plan_app
+from auto_edit.presenter_cli import presenter_app
 from auto_edit.workspace import get_workspace, init_workspace, get_status_table
 
 
@@ -45,6 +46,7 @@ app.add_typer(plan_app, name="plan")
 app.add_typer(ideas_app, name="ideas")
 app.add_typer(insights_app, name="insights")
 app.add_typer(publish_app, name="publish")
+app.add_typer(presenter_app, name="presenter")
 
 
 @app.callback(invoke_without_command=True)
@@ -215,6 +217,7 @@ def _run_pipeline(
     graphics: bool = False,
     look: Optional[str] = None,
     script: Optional[Path] = None,
+    backdrop: bool = False,
 ) -> None:
     if not video.exists():
         console.print(f"[red]Error:[/red] File not found: {video}")
@@ -258,6 +261,8 @@ def _run_pipeline(
         pl.set_option(ws, "script", script.read_text(encoding="utf-8"))
     if reorder:
         pl.set_reorder(ws)
+    if backdrop:
+        pl.set_backdrop(ws)
     console.print(f"[cyan]Type:[/cyan] {video_type}")
     console.print(f"[cyan]Context:[/cyan] {context or '(none)'}")
     if pl.load(ws).get("cold_open"):
@@ -270,6 +275,8 @@ def _run_pipeline(
         console.print("[cyan]Gráficos:[/cyan] sim (motion graphics explicativos via HyperFrames)")
     if pl.load(ws).get("reorder"):
         console.print("[cyan]Reordenação:[/cyan] sim (o agente pode mudar a ordem dos blocos)")
+    if pl.load(ws).get("backdrop"):
+        console.print("[cyan]Fundo por assunto:[/cyan] sim (recorte local + cenário do presenter.json)")
     console.print(f"[cyan]Whisper model:[/cyan] {whisper_model}")
     console.print(f"[cyan]Language:[/cyan] {language}")
     console.print(f"[cyan]Workspace:[/cyan] {ws}")
@@ -339,6 +346,7 @@ def short(
     graphics: bool = typer.Option(False, "--graphics", help="Short: adiciona motion graphics explicativos (passos, números, antes × depois, código, gráfico) renderizados com HyperFrames."),
     look: Optional[str] = typer.Option(None, "--look", help="Tratamento de imagem: low-light (ambiente escuro) ou studio. Melhora iluminação, ruído, pele e nitidez; sai em 1080x1920."),
     script: Optional[Path] = typer.Option(None, "--script", help="Arquivo .txt com o roteiro: corrige a grafia das legendas onde a fala bate com ele e guia os gráficos pela narrativa."),
+    backdrop: bool = typer.Option(False, "--backdrop", help="Troca o fundo atrás de você conforme o assunto (recorte local; veja `auto-edit presenter`)."),
 ) -> None:
     """Edit a short-form video (adds captions, generates Reels/Shorts metadata)."""
     if whisper_model not in VALID_MODELS:
@@ -369,6 +377,7 @@ def short(
         graphics=graphics,
         look=look,
         script=script,
+        backdrop=backdrop,
     )
 
 
@@ -401,6 +410,7 @@ def long(
     cold_open: bool = typer.Option(False, "--cold-open", help="Abre o vídeo com o melhor momento (teaser) antes da abertura normal."),
     reorder: bool = typer.Option(False, "--reorder", help="Deixa o agente mudar a ordem dos blocos (ex.: demo antes da explicação)."),
     script: Optional[Path] = typer.Option(None, "--script", help="Arquivo .txt com o roteiro: corrige a grafia das legendas onde a fala bate com ele e guia os gráficos pela narrativa."),
+    backdrop: bool = typer.Option(False, "--backdrop", help="Troca o fundo atrás de você conforme o assunto (recorte local; veja `auto-edit presenter`)."),
 ) -> None:
     """Edit a long-form video (no captions, generates YouTube metadata)."""
     if whisper_model not in VALID_MODELS:
@@ -425,6 +435,7 @@ def long(
         cold_open=cold_open,
         reorder=reorder,
         script=script,
+        backdrop=backdrop,
     )
 
 
@@ -1077,6 +1088,13 @@ def doctor() -> None:
         npx_path or "NOT FOUND",
         "[green]OK[/green]" if npx_path else "[yellow]WARN[/yellow] install Node.js 22+ for animated overlays/captions",
     ))
+
+    # Backdrop (opcional: --backdrop / thumbnail do presenter; recorte local da pessoa)
+    try:
+        import onnxruntime  # noqa: F401
+        checks.append(("onnxruntime (backdrop)", "", "[green]OK[/green]"))
+    except ImportError:
+        checks.append(("onnxruntime (backdrop)", "", "[yellow]WARN[/yellow] pip install -e \".[backdrop]\" para --backdrop"))
 
     # LLM CLI
     for cli_name in ("claude", "cursor"):

@@ -30,6 +30,7 @@ auto-edit = "auto_edit.cli:app"
 test = ["pytest>=8.0"]
 mcp = ["mcp>=1.0.0"]
 api = ["flask>=3.0"]
+backdrop = ["onnxruntime-directml; sys_platform == 'win32'", "onnxruntime; sys_platform != 'win32'"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

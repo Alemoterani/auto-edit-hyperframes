@@ -55,3 +55,8 @@ def test_options_are_stored_on_the_pipeline(tmp_path):
     pl.set_option(ws, "video_filter", LOOKS["low-light"])
     p = pl.load(ws)
     assert p["script"] == SCRIPT and "scale=1080:1920" in p["video_filter"]
+
+
+def test_quote_marks_are_dropped_but_apostrophes_kept():
+    words = script_align.script_words("Quem paga o pão que é 'de graça'? Um copo d'água.")
+    assert "graça?" in words and "de" in words and "d'água." in words

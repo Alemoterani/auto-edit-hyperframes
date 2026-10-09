@@ -21,6 +21,7 @@ from difflib import SequenceMatcher
 _PARENS = re.compile(r"\([^)]*\)")
 _HEADING = re.compile(r"^\s*(roteiro|gancho|ato\s+\d+|fechamento|cena|cta)\b.*$", re.IGNORECASE | re.MULTILINE)
 _TOKEN = re.compile(r"\S+")
+_QUOTES = re.compile(r"[\"“”]|(?<!\w)['‘’]|['‘’](?!\w)")
 MIN_SIMILARITY = 0.6
 
 
@@ -32,7 +33,8 @@ def _norm(word: str) -> str:
 def script_words(script: str) -> list[str]:
     """Spoken words of the script, with their punctuation, in order."""
     text = _HEADING.sub(" ", _PARENS.sub(" ", script))
-    words = [w.strip("\"“”'‘’") for w in _TOKEN.findall(text)]
+    # Drop quote marks ('de graça'? -> de graça?) but keep apostrophes inside words (d'água).
+    words = [_QUOTES.sub("", w) for w in _TOKEN.findall(text)]
     return [w for w in words if _norm(w)]
 
 

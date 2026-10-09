@@ -63,6 +63,43 @@ def _missing_assets_message(missing: list[str], search_dirs: list[Path]) -> str:
     )
 
 
+OVERLAY_GAP = 0.3            # seconds of clear screen between two overlays
+MIN_TEMPLATE_DURATION = 1.2  # shorter than this and the animation can't play
+
+
+def _fit_template_durations(
+    overlays: list[dict],
+    kept: list[tuple[float, float]],
+) -> tuple[list[dict], list[str]]:
+    """Keep overlays from stacking on screen (they share the same spot).
+
+    A template that would still be up when the next overlay starts is shortened
+    to end OVERLAY_GAP before it — it is rendered at that length, so its exit
+    animation still plays. If that leaves less than MIN_TEMPLATE_DURATION, the
+    later overlay is dropped instead. Returns (overlays to place, dropped names).
+    """
+    timed = []
+    for ov in overlays:
+        start = _remap(float(ov["original_start"]), kept)
+        timed.append((float("inf") if start is None else start, ov))  # removed-by-cut sorts last, untouched
+    timed.sort(key=lambda t: t[0])
+
+    placed: list[tuple[float, dict]] = []
+    dropped: list[str] = []
+    for start, ov in timed:
+        prev = placed[-1] if placed else None
+        if prev and start != float("inf") and "template" in prev[1]:
+            prev_start, prev_ov = prev
+            room = start - OVERLAY_GAP - prev_start
+            if room < MIN_TEMPLATE_DURATION:
+                dropped.append(ov.get("file") or f"template:{ov.get('template')}")
+                continue
+            if float(prev_ov.get("duration", DEFAULT_TEMPLATE_DURATION)) > room:
+                prev_ov["duration"] = round(room, 2)
+        placed.append((start, ov))
+    return [ov for _, ov in placed], dropped
+
+
 def _resolve_overlays(
     overlays: list[dict],
     search_dirs: list[Path],
@@ -197,6 +234,10 @@ def overlay(workspace: Path) -> None:
             ov["template"], ov.get("vars", {}), workspace / "hf_cache",
             vw, vh, float(ov.get("duration", DEFAULT_TEMPLATE_DURATION)), fps,
         )
+
+    overlays, overlapping = _fit_template_durations(overlays, kept)
+    for name in overlapping:
+        print(f"[overlayer] WARNING: {name} starts while the previous overlay is still up — skipped.")
 
     found, missing, removed = _resolve_overlays(overlays, search_dirs, kept, render_template)
 

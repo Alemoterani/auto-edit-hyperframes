@@ -48,8 +48,13 @@ def template_dir(name: str) -> Path:
 
 
 def _patch_root(html: str, width: int, height: int, duration: float) -> str:
-    """Rewrite the composition root's size/duration (first occurrence = root div)."""
-    html = re.sub(r'data-duration="[^"]*"', f'data-duration="{duration:.3f}"', html, count=1)
+    """Rewrite the composition's size (root div) and duration.
+
+    Every `data-duration` is rewritten, not just the root's: templates are one
+    full-length clip inside the root, and a clip keeps its authored length
+    otherwise — HyperFrames hides it then, cutting the graphic off early.
+    """
+    html = re.sub(r'data-duration="[^"]*"', f'data-duration="{duration:.3f}"', html)
     html = re.sub(r'data-width="[^"]*"', f'data-width="{width}"', html, count=1)
     html = re.sub(r'data-height="[^"]*"', f'data-height="{height}"', html, count=1)
     # The root CSS box is authored in px; override it to the real frame size.

@@ -238,3 +238,29 @@ def test_video_filter_runs_before_the_overlays(monkeypatch):
     graph = captured["cmd"][captured["cmd"].index("-filter_complex") + 1]
     assert graph.startswith("[0:v]scale=1080:1920:flags=lanczos,fps=30[base]")
     assert "scale=w=1080:h=1920" in graph  # overlay fitted to the filtered frame
+
+
+class TestFitTemplateDurations:
+    KEPT = [(0.0, 200.0)]
+
+    def test_shortens_a_template_that_would_still_be_up(self):
+        from tools.overlayer import _fit_template_durations
+        a = {"template": "compare", "original_start": 49.5, "duration": 6}
+        b = {"template": "chapter", "original_start": 54.06, "duration": 3}
+        kept, dropped = _fit_template_durations([b, a], self.KEPT)
+        assert kept == [a, b] and not dropped
+        assert a["duration"] == pytest.approx(54.06 - 0.3 - 49.5)
+
+    def test_drops_the_later_one_when_there_is_no_room(self):
+        from tools.overlayer import _fit_template_durations
+        a = {"template": "chapter", "original_start": 10.0, "duration": 3}
+        b = {"template": "steps", "original_start": 10.8, "duration": 8}
+        kept, dropped = _fit_template_durations([a, b], self.KEPT)
+        assert kept == [a] and dropped == ["template:steps"]
+
+    def test_leaves_spaced_overlays_alone(self):
+        from tools.overlayer import _fit_template_durations
+        a = {"template": "stat", "original_start": 5.0, "duration": 4}
+        b = {"template": "quote", "original_start": 20.0, "duration": 5}
+        kept, _ = _fit_template_durations([a, b], self.KEPT)
+        assert a["duration"] == 4 and b["duration"] == 5

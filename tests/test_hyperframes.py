@@ -6,14 +6,14 @@ import pytest
 from auto_edit import hyperframes
 
 
-def test_patch_root_rewrites_size_and_duration_once():
+def test_patch_root_rewrites_size_and_every_duration():
     html = (
         '<html><head></head><body><div id="root" data-duration="4" data-width="1920" data-height="1080">'
         '<section data-duration="4"></section></div></body></html>'
     )
     out = hyperframes._patch_root(html, 1080, 1920, 7.5)
     assert 'data-duration="7.500" data-width="1080" data-height="1920"' in out
-    assert '<section data-duration="4">' in out  # only the root is touched
+    assert '<section data-duration="7.500">' in out  # the clip lasts the whole render too
     assert "#root{width:1080px;height:1920px}" in out
 
 

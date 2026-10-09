@@ -264,3 +264,31 @@ class TestFitTemplateDurations:
         b = {"template": "quote", "original_start": 20.0, "duration": 5}
         kept, _ = _fit_template_durations([a, b], self.KEPT)
         assert a["duration"] == 4 and b["duration"] == 5
+
+
+class TestCardsFollowTheTopic:
+    def test_card_lasts_until_the_topic_ends(self):
+        from tools.overlayer import _fit_template_durations, END_TAIL
+        a = {"template": "steps", "original_start": 30.0, "original_end": 44.0, "duration": 5}
+        kept, _ = _fit_template_durations([a], [(0.0, 200.0)])
+        assert a["duration"] == pytest.approx(14.0 + END_TAIL)
+
+    def test_topic_end_inside_a_cut_clamps_to_the_kept_part(self):
+        from tools.overlayer import _fit_template_durations, END_TAIL
+        a = {"template": "quote", "original_start": 2.0, "original_end": 15.0}
+        _fit_template_durations([a], KEPT)  # 10-20s is cut
+        assert a["duration"] == pytest.approx(8.0 + END_TAIL)
+
+    def test_next_card_still_wins_over_a_long_topic(self):
+        from tools.overlayer import _fit_template_durations
+        a = {"template": "chapter", "original_start": 50.0, "original_end": 70.0}
+        b = {"template": "quote", "original_start": 55.0, "original_end": 60.0}
+        _fit_template_durations([a, b], [(0.0, 200.0)])
+        assert a["duration"] == pytest.approx(4.7)
+
+    def test_short_gap_to_the_next_card_is_closed(self):
+        from tools.overlayer import _fit_template_durations
+        a = {"template": "stat", "original_start": 10.0, "original_end": 13.0}  # 3.5s with tail
+        b = {"template": "compare", "original_start": 14.2, "original_end": 20.0}
+        _fit_template_durations([a, b], [(0.0, 200.0)])
+        assert a["duration"] == pytest.approx(14.2 - 0.3 - 10.0)

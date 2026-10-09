@@ -50,6 +50,7 @@ Shorts are vertical and have captions at the bottom. Use **only** the explainer 
 - Use **original** video timestamps (before cuts); the tool remaps to the edited timeline.
 - **`original_start` must fall inside a segment that survives the cut plan** (inside a `kept_segments` range). If that moment is removed by cuts, the overlay will not appear — prefer a trigger a few seconds earlier/later that is clearly still in a kept block.
 - Choose a `start` on a natural pause or sentence boundary — never mid-word.
+- **Every `template` entry needs `original_end`**: the end timestamp of the **last word** the speaker says about what that card shows — the end of the sentence or of the whole topic, not of the first phrase. The card stays on screen from `original_start` to `original_end` (`duration` is then ignored), so it must cover everything said about that subject. A `quote` ends when the quoted line is finished; `steps`/`compare`/`stat`/`chart` end when the speaker moves on from that list, contrast or number; a `chapter` ends at the end of the first sentence of its part (or when the part's first illustrating card starts). Overlapping cards are trimmed automatically, so prefer covering the full topic.
 - Overlay MP4s must exist under **`assets/overlays/`** with the exact filenames below (`ctas.mp4`, `lowerthid_gabul.mp4`). If a file is missing, the stage warns and renders without that overlay.
 - If a trigger is not clearly present in the transcription, do NOT invent one.
 - One overlay per moment: never use both `ctas.mp4` and `cta`, or both `lowerthid_gabul.mp4` and `lower_third`, for the same trigger.
@@ -72,14 +73,14 @@ Schema:
       "template": "highlight",
       "vars": {"label": "Dica", "text": "Rode os testes antes do commit"},
       "original_start": 120.4,
-      "duration": 5,
+      "original_end": 131.9,
       "reason": "Main takeaway of the section explained at 120.4s"
     },
     {
       "template": "cta",
       "vars": {"text": "Se inscreve no canal"},
       "original_start": 245.8,
-      "duration": 4,
+      "original_end": 249.6,
       "reason": "Speaker says 'se inscreve no canal' at 245.8s"
     }
   ]

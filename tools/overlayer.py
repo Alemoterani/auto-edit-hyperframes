@@ -65,22 +65,44 @@ def _missing_assets_message(missing: list[str], search_dirs: list[Path]) -> str:
 
 OVERLAY_GAP = 0.3            # seconds of clear screen between two overlays
 MIN_TEMPLATE_DURATION = 1.2  # shorter than this and the animation can't play
+END_TAIL = 0.5               # after the topic's last word, so the exit plays once it's said
+BRIDGE = 1.0                 # a gap shorter than this to the next card is closed (no flicker)
+
+
+def _remap_end(original_ts: float, kept: list[tuple[float, float]]) -> float | None:
+    """Like _remap, but a timestamp inside a cut maps to the end of the kept part before it."""
+    accumulated = 0.0
+    for start, end in kept:
+        if original_ts < start:
+            return accumulated if accumulated > 0 else None
+        if original_ts <= end:
+            return accumulated + (original_ts - start)
+        accumulated += end - start
+    return accumulated
 
 
 def _fit_template_durations(
     overlays: list[dict],
     kept: list[tuple[float, float]],
 ) -> tuple[list[dict], list[str]]:
-    """Keep overlays from stacking on screen (they share the same spot).
+    """Size each template to the topic it illustrates, without stacking cards.
 
-    A template that would still be up when the next overlay starts is shortened
-    to end OVERLAY_GAP before it — it is rendered at that length, so its exit
-    animation still plays. If that leaves less than MIN_TEMPLATE_DURATION, the
-    later overlay is dropped instead. Returns (overlays to place, dropped names).
+    - With `original_end` (where the speaker finishes that topic), a template
+      lasts until then + END_TAIL, so the card stays up for the whole sentence.
+    - A template still up when the next overlay starts is shortened to end
+      OVERLAY_GAP before it (rendered at that length, so its exit still plays);
+      if that leaves < MIN_TEMPLATE_DURATION, the later overlay is dropped.
+    - A gap < BRIDGE to the next overlay is closed, so cards don't flicker.
+
+    Returns (overlays to place, dropped names).
     """
     timed = []
     for ov in overlays:
         start = _remap(float(ov["original_start"]), kept)
+        if start is not None and "template" in ov and ov.get("original_end") is not None:
+            end = _remap_end(float(ov["original_end"]), kept)
+            if end is not None and end > start:
+                ov["duration"] = round(max(MIN_TEMPLATE_DURATION, end - start + END_TAIL), 2)
         timed.append((float("inf") if start is None else start, ov))  # removed-by-cut sorts last, untouched
     timed.sort(key=lambda t: t[0])
 
@@ -94,7 +116,8 @@ def _fit_template_durations(
             if room < MIN_TEMPLATE_DURATION:
                 dropped.append(ov.get("file") or f"template:{ov.get('template')}")
                 continue
-            if float(prev_ov.get("duration", DEFAULT_TEMPLATE_DURATION)) > room:
+            prev_dur = float(prev_ov.get("duration", DEFAULT_TEMPLATE_DURATION))
+            if prev_dur > room or room - prev_dur < BRIDGE:
                 prev_ov["duration"] = round(room, 2)
         placed.append((start, ov))
     return [ov for _, ov in placed], dropped

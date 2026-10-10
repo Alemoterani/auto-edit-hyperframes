@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -186,8 +187,39 @@ PREFERRED_FONTS = [
 ]
 
 
-def _find_font() -> Path | None:
-    """Find a bold TTF font in assets/thumbnails/fonts/, preferring display fonts."""
+# Fontes bold do sistema com os acentos do português, usadas quando nenhuma de
+# assets/thumbnails/fonts/ cobre o texto. Sem elas o Pillow caía na fonte padrão,
+# que não tem Ã/Ç: "PÃO DE GRAÇA" saía com quadradinhos ("tofu") na capa.
+SYSTEM_FONTS = [
+    "C:/Windows/Fonts/impact.ttf",
+    "C:/Windows/Fonts/seguibl.ttf",
+    "C:/Windows/Fonts/arialbd.ttf",
+    "/System/Library/Fonts/Supplemental/Impact.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+]
+
+
+def _covers(font_path: Path, text: str) -> bool:
+    """True se a fonte desenha todos os caracteres de `text` (nenhum vira o glifo "não existe")."""
+    try:
+        font = ImageFont.truetype(str(font_path), 32)
+    except OSError:
+        return False
+
+    def glyph(ch: str) -> bytes:
+        img = Image.new("L", (64, 64))
+        ImageDraw.Draw(img).text((8, 8), ch, font=font, fill=255)
+        return img.tobytes()
+
+    missing = glyph("\uffff")
+    return all(glyph(ch) != missing for ch in set(text) if not ch.isspace())
+
+
+def _find_font(text: str = "") -> Path | None:
+    """Fonte bold que cobre `text`: assets/thumbnails/fonts/ (preferidas primeiro) e,
+    se nenhuma cobrir, as do sistema. None só quando nenhuma fonte tem os caracteres."""
     dirs = []
     env = os.environ.get("AUTO_EDIT_ASSETS_FONTS")
     if env:
@@ -201,16 +233,15 @@ def _find_font() -> Path | None:
         all_fonts.extend(d.glob("*.ttf"))
         all_fonts.extend(d.glob("*.otf"))
 
-    if not all_fonts:
-        return None
+    ranked = [f for pref in PREFERRED_FONTS for f in all_fonts if pref.lower() in f.stem.lower()]
+    ranked += [f for f in sorted(all_fonts) if f not in ranked]
+    ranked += [Path(p) for p in SYSTEM_FONTS if Path(p).is_file()]
 
-    # Try preferred fonts first
-    for pref in PREFERRED_FONTS:
-        for f in all_fonts:
-            if pref.lower() in f.stem.lower():
-                return f
-
-    return sorted(all_fonts)[0]
+    for f in ranked:
+        if not text or _covers(f, text):
+            return f
+    print(f"[thumbnailer] WARNING: nenhuma fonte cobre o texto {text!r} — instale uma fonte bold com acentos")
+    return None
 
 
 def _find_logo_assets(names: list[str] | None = None) -> list[Path]:
@@ -492,7 +523,9 @@ def _forced_timestamp() -> float | None:
     return ts
 
 
-CUT_VIDEO_NAMES = ("captioned_video.mp4", "overlaid_video.mp4", "edited_video.mp4")
+# O corte limpo primeiro: tirar o frame do vídeo legendado (ou com gráficos) queimava
+# a legenda na capa — e, depois do primeiro run, a capa antiga embutida nos 1ºs frames.
+CUT_VIDEO_NAMES = ("edited_video.mp4", "overlaid_video.mp4", "captioned_video.mp4")
 
 
 def _frame_source(workspace: Path, pipeline: dict) -> tuple[str, dict]:
@@ -882,7 +915,8 @@ def _draw_thumbnail_text(
 ) -> Image.Image:
     """Overlay main_text (branco condensado) e sub_text (chip accent) na safe zone."""
     img = img.convert("RGBA")
-    font_path = _find_font()
+    probe_text = f"{main_text} {sub_text or ''}"
+    font_path = _find_font(probe_text + probe_text.upper())
     w, h = img.size
 
     accent_color = tuple(template.get("accent", [255, 220, 0]))
@@ -966,6 +1000,19 @@ def _draw_thumbnail_text(
 # ── Thumbnail flows ─────────────────────────────────────────────────────────
 
 
+def _auto_exposure(img: Image.Image, target: float = 110.0) -> Image.Image:
+    """Clareia frame escuro (gravação com pouca luz): estica os níveis e sobe os meios-tons
+    até o brilho médio chegar perto de `target`. Frame já bem exposto passa sem mudança."""
+    arr = np.asarray(img.convert("RGB"), dtype=np.float32)
+    if arr.mean() >= target - 10:
+        return img
+    lo, hi = np.percentile(arr, (1, 99))
+    arr = np.clip((arr - lo) / max(hi - lo, 1.0), 0.0, 1.0)
+    gamma = np.log(target / 255.0) / np.log(max(float(arr.mean()), 1e-3))
+    arr = arr ** min(max(gamma, 0.4), 1.0)
+    return Image.fromarray((arr * 255).astype(np.uint8))
+
+
 def _thumbnail_short(workspace: Path, metadata: dict, pipeline: dict) -> Path:
     """Generate thumbnail for short video: best frame + template + bold text."""
     thumb_data = metadata.get("thumbnail", {})
@@ -988,6 +1035,7 @@ def _thumbnail_short(workspace: Path, metadata: dict, pipeline: dict) -> Path:
 
     img = Image.open(frame_path)
     img = _crop_center(img, w, h)
+    img = _auto_exposure(img)
     img = _apply_grade(img, template.get("grade"))
 
     img = _draw_thumbnail_text(img, main_text, sub_text, template, position="center")
@@ -1104,6 +1152,7 @@ def _thumbnail_long(workspace: Path, metadata: dict, pipeline: dict) -> Path:
 
 # ── Cover frame embedding ───────────────────────────────────────────────────
 
+CUSTOM_THUMBNAIL = "thumbnail_custom.png"  # capa pronta na pasta do vídeo: usada no lugar da automática
 COVER_FRAMES = 2              # still frames prepended as the cover
 COVER_MAX_DURATION = 0.35     # a leading segment shorter than this is our own cover
 COVER_TAG = "auto-edit-cover"
@@ -1345,7 +1394,14 @@ def thumbnail(workspace: Path) -> None:
 
     video_type = pipeline.get("type", "short")
 
-    if video_type == "short":
+    # Capa feita à mão (ex.: exportada de um design) tem prioridade: sem isso, todo
+    # resume regerava a automática por cima dela no thumbnail.png e no output/.
+    custom = workspace / CUSTOM_THUMBNAIL
+    if custom.is_file():
+        thumb = workspace / "thumbnail.png"
+        shutil.copy2(custom, thumb)
+        print(f"[thumbnailer] Usando a capa personalizada {CUSTOM_THUMBNAIL}")
+    elif video_type == "short":
         thumb = _thumbnail_short(workspace, metadata, pipeline)
     else:
         thumb = _thumbnail_long(workspace, metadata, pipeline)

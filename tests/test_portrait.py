@@ -66,6 +66,19 @@ def test_dress_saves_each_returned_image_and_skips_empty(tmp_path):
     assert img.size == (40, 60) and prompt == portrait.build_prompt("tecnologia")
 
 
+def test_dress_sends_reference_photos_expression_and_scene(tmp_path):
+    photo, side = tmp_path / "frente.jpg", tmp_path / "perfil.jpg"
+    Image.new("RGB", (40, 60)).save(photo)
+    Image.new("RGB", (30, 50)).save(side)
+    client = FakeClient()
+    portrait.dress(photo, "política", tmp_path, n=1, client=client, refs=[side],
+                   expression="sério e cético", scene="um porto de contêineres")
+    _, (base, ref, prompt) = client.calls[0]
+    assert base.size == (40, 60) and ref.size == (30, 50)
+    assert portrait.REFS_NOTE in prompt and "sério e cético" in prompt and "um porto de contêineres" in prompt
+    assert portrait.TOPICS["política"]["scene"] not in prompt
+
+
 @pytest.mark.parametrize("size", list(portrait.SIZES.values()))
 def test_compose_outputs_layout_size_with_highlight_bar(size):
     img = Image.new("RGB", (400, 600), (120, 90, 70))

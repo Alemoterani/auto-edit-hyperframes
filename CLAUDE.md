@@ -154,7 +154,7 @@ recorta local (RVM) e monta 16:9 + 9:16: palavra gigante atrás da cabeça, rim 
 (`topics.<assunto>.outfit/scene/accent`) e define `signature` (nome/@ no canto).
 
 ```bash
-auto-edit presenter dress foto.jpg --topic finanças -n 3     # foto_finanças_1..3.png
+auto-edit presenter dress foto.jpg --topic finanças -n 3 --ref perfil.jpg --expression "sério, cético"  # foto_finanças_1..3.png
 auto-edit presenter thumb foto_finanças_2.png --topic finanças --word JUROS \
   --title "Quem paga a conta" --highlight "Ninguém te conta" --video "A Padaria"
 ```

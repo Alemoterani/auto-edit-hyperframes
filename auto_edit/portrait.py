@@ -65,8 +65,12 @@ TOPICS = {
 
 IDENTITY_RULES = (
     "Keep the person's face EXACTLY as in the photo: same face shape, eyes, nose, mouth, skin tone, hair, "
-    "facial hair, age and expression. Do not beautify, slim, smooth, reshape or change identity in any way. "
+    "facial hair and age. Do not beautify, slim, smooth, reshape or change identity in any way. "
     "Keep the same head pose and framing."
+)
+REFS_NOTE = (
+    "The first image is the photo to edit. The other images are the same person from other angles: "
+    "use them only as identity reference so the face stays identical."
 )
 
 
@@ -80,12 +84,15 @@ def topic_style(topic: str) -> dict:
     return style
 
 
-def build_prompt(topic: str) -> str:
+def build_prompt(topic: str, expression: str = "", scene: str = "", refs: int = 0) -> str:
+    """Prompt da edição. ``expression``/``scene`` valem só para este vídeo; ``refs`` = fotos extras de identidade."""
     s = topic_style(topic)
+    face = (f"Only the facial expression changes, to: {expression}, with the same facial features. "
+            if expression else "Keep the same facial expression. ")
     return (
         "Edit this photo into a professional portrait. "
-        f"{IDENTITY_RULES} "
-        f"Change ONLY: the clothing to {s['outfit']}, conveying authority; the background to {s['scene']}, "
+        f"{REFS_NOTE + ' ' if refs else ''}{IDENTITY_RULES} {face}"
+        f"Change ONLY: the clothing to {s['outfit']}, conveying authority; the background to {scene or s['scene']}, "
         "shallow depth of field; the lighting to soft studio key light with a subtle rim light. "
         "Correct exposure and white balance and remove only minor skin blemishes. "
         "Photorealistic, natural, no filters, no text, no logos."
@@ -103,12 +110,18 @@ def _client():
     return genai.Client(api_key=key)
 
 
-def dress(photo: Path, topic: str, out_dir: Path, n: int = 3, client=None) -> list[Path]:
-    """Gera ``n`` variantes da foto vestida/iluminada para o assunto. Devolve os PNGs salvos."""
-    with Image.open(photo) as f:
-        img = ImageOps.exif_transpose(f).convert("RGB")  # foto de celular vem deitada sem isso
+def _open(path: Path) -> Image.Image:
+    with Image.open(path) as f:
+        return ImageOps.exif_transpose(f).convert("RGB")  # foto de celular vem deitada sem isso
+
+
+def dress(photo: Path, topic: str, out_dir: Path, n: int = 3, client=None, refs: list[Path] = (),
+          expression: str = "", scene: str = "") -> list[Path]:
+    """Gera ``n`` variantes da foto vestida/iluminada para o assunto. ``refs``: outras fotos suas (outros
+    ângulos) que só servem para o modelo manter o rosto. Devolve os PNGs salvos."""
     client = client or _client()
-    contents = [img, build_prompt(topic)]  # o google-genai aceita a imagem PIL direto
+    images = [_open(photo), *(_open(r) for r in refs)]  # o google-genai aceita a imagem PIL direto
+    contents = [*images, build_prompt(topic, expression, scene, refs=len(refs))]
     model = os.environ.get("AUTO_EDIT_IMAGE_MODEL", DEFAULT_MODEL)
     slug = (topic or "neutro").split()[0].lower()
     out_dir.mkdir(parents=True, exist_ok=True)

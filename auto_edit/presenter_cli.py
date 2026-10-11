@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import typer
 from rich.console import Console
@@ -101,10 +101,14 @@ def dress(
     topic: str = typer.Option(..., "--topic", help="Assunto do vídeo (finanças, política, tecnologia, educação, saúde...)"),
     n: int = typer.Option(3, "-n", min=1, max=6, help="Quantas variantes gerar"),
     out_dir: Optional[Path] = typer.Option(None, "--out-dir", "-o"),
+    ref: Optional[List[Path]] = typer.Option(None, "--ref", exists=True, dir_okay=False, help="Outra foto sua (outro ângulo) só para manter o rosto; repita a opção"),
+    expression: str = typer.Option("", "--expression", help="Expressão para este vídeo (ex.: 'sério, cético, uma sobrancelha levantada')"),
+    scene: str = typer.Option("", "--scene", help="Cenário só deste vídeo (sobrescreve o do assunto)"),
 ) -> None:
     """Veste e ilumina você conforme o assunto (Gemini; o rosto não muda). Escolha a variante mais fiel."""
     try:
-        saved = portrait.dress(photo, topic, out_dir or photo.parent, n=n)
+        saved = portrait.dress(photo, topic, out_dir or photo.parent, n=n, refs=ref or [],
+                               expression=expression, scene=scene)
     except RuntimeError as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)

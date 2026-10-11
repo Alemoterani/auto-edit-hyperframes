@@ -189,10 +189,10 @@ def compose(
     wide = w > h
     src = np.asarray(portrait.convert("RGB"), dtype=np.float32) / 255.0
 
-    # Fundo: o cenário da foto sem você, bem desfocado e escurecido (você é o que tem foco)
+    # Fundo: o cenário da foto sem você, desfocado, sem escurecer só ele (senão você fica colado por cima)
     plate = _clean_plate(src, alpha, max(src.shape[:2]) / 25)
     bg = backdrop.cover(Image.fromarray((plate * 255).astype(np.uint8)), size).filter(ImageFilter.GaussianBlur(6))
-    canvas = np.asarray(bg, dtype=np.float32) / 255.0 * 0.7
+    canvas = np.asarray(bg, dtype=np.float32) / 255.0  # mesma luz da foto: você e o cenário recebem o mesmo tratamento
 
     # Você: escala pela altura, base colada embaixo, centro do recorte na posição do layout
     scale = h * (1.02 if wide else 0.80) / portrait.height
@@ -228,10 +228,10 @@ def compose(
 
     # Rim light: halo na cor do assunto em volta do recorte
     acc = np.array(accent, np.float32) / 255.0
-    halo = np.clip(_blur(A, 10) - A, 0, 1) * 0.9
+    halo = np.clip(_blur(A, 10) - A, 0, 1) * 0.3  # sutil: forte demais te descola do fundo
     canvas = np.clip(canvas + halo[..., None] * acc, 0, 1)
     canvas = layer * A[..., None] + canvas * (1 - A[..., None])
-    edge = A * np.clip(1 - _blur(A, 4) * 1.15, 0, 1) * 0.6  # luz de contorno por dentro da borda
+    edge = A * np.clip(1 - _blur(A, 4) * 1.15, 0, 1) * 0.2  # luz de contorno por dentro da borda
     canvas = np.clip(canvas + edge[..., None] * acc, 0, 1)
 
     # Vinheta + base escura para o texto

@@ -146,11 +146,24 @@ auto-edit long video.mp4 -c "finanças pessoais" --backdrop       # no pipeline,
 auto-edit presenter status
 ```
 
+**Capa "Autoridade Editorial" a partir de uma foto sua** (`auto_edit/portrait.py`): o `dress` manda a foto ao
+Gemini (`GEMINI_API_KEY`, modelo em `AUTO_EDIT_IMAGE_MODEL`, default `gemini-2.5-flash-image`) trocando SÓ roupa,
+cenário e luz conforme o assunto — rosto, pele e cabelo preservados; você escolhe a variante mais fiel. O `thumb`
+recorta local (RVM) e monta 16:9 + 9:16: palavra gigante atrás da cabeça, rim light na cor do assunto, faixa amarela
+`#FFD400` (fixa da marca) e título branco. Roupa/cenário por assunto em `portrait.TOPICS`; `presenter.json` sobrescreve
+(`topics.<assunto>.outfit/scene/accent`) e define `signature` (nome/@ no canto).
+
+```bash
+auto-edit presenter dress foto.jpg --topic finanças -n 3     # foto_finanças_1..3.png
+auto-edit presenter thumb foto_finanças_2.png --topic finanças --word JUROS \
+  --title "Quem paga a conta" --highlight "Ninguém te conta" --video "A Padaria"
+```
+
 Config em `~/.auto-edit/presenter.json`. Com `--backdrop` o `edited_video.mp4` é trocado (o corte original fica em
 `edited_video_original.mp4`); falha nunca derruba a edição. Combina com `--look studio|low-light`: o tratamento
 roda depois (no overlay/caption) e passa por você e pelo cenário juntos. Com `thumbnail: true`, a thumbnail do **long** usa o
 melhor frame com você recortado no fundo do assunto. Skills de agente em `.claude/skills/` (hyperframes, media-use,
-embedded-captions, talking-head-recut, motion-graphics). Não faz: trocar roupa nem clonar rosto/voz (sem GPU pra isso).
+embedded-captions, talking-head-recut, motion-graphics). No vídeo não troca roupa nem clona rosto/voz (sem GPU pra isso); roupa só na capa, via `presenter dress` (Gemini).
 
 ## Slash Commands Disponíveis
 

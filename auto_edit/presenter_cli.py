@@ -7,7 +7,7 @@ from typing import Optional
 import typer
 from rich.console import Console
 
-from auto_edit import backdrop, presenter
+from auto_edit import backdrop, portrait, presenter
 
 presenter_app = typer.Typer(help="Fundo atrás de você por assunto (recorte local, sem conta nem API).")
 console = Console()
@@ -46,7 +46,7 @@ def set_value(
         if not backdrop_spec:
             console.print("[red]Use --backdrop junto com --topic[/red]")
             raise typer.Exit(1)
-        cfg.setdefault("topics", {})[topic] = {"backdrop": backdrop_spec}
+        cfg.setdefault("topics", {}).setdefault(topic, {})["backdrop"] = backdrop_spec  # mantém outfit/scene
     if default is not None:
         cfg["default_backdrop"] = default
     if thumbnail is not None:
@@ -93,3 +93,66 @@ def swap(
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
     console.print(f"[green]✓[/green] {dst}")
+
+
+@presenter_app.command()
+def dress(
+    photo: Path = typer.Argument(..., exists=True, dir_okay=False, help="Sua foto"),
+    topic: str = typer.Option(..., "--topic", help="Assunto do vídeo (finanças, política, tecnologia, educação, saúde...)"),
+    n: int = typer.Option(3, "-n", min=1, max=6, help="Quantas variantes gerar"),
+    out_dir: Optional[Path] = typer.Option(None, "--out-dir", "-o"),
+) -> None:
+    """Veste e ilumina você conforme o assunto (Gemini; o rosto não muda). Escolha a variante mais fiel."""
+    try:
+        saved = portrait.dress(photo, topic, out_dir or photo.parent, n=n)
+    except RuntimeError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    for p in saved:
+        console.print(f"[green]✓[/green] {p}")
+    if not saved:
+        raise typer.Exit(1)
+
+
+@presenter_app.command()
+def thumb(
+    photo: Path = typer.Argument(..., exists=True, dir_okay=False, help="Foto escolhida (saída do dress)"),
+    word: str = typer.Option(..., "--word", "-w", help="Palavra gigante atrás da cabeça"),
+    title: str = typer.Option(..., "--title", help="Título branco"),
+    highlight: str = typer.Option("", "--highlight", help="Gancho na faixa amarela"),
+    topic: str = typer.Option("", "--topic", help="Assunto (cor da luz de contorno)"),
+    video: Optional[str] = typer.Option(None, "--video", help="Nome do vídeo no workspace: salva a capa lá também"),
+    signature: Optional[str] = typer.Option(None, "--signature", help="Seu nome/@ no canto (padrão: 'signature' do presenter.json)"),
+) -> None:
+    """Capa na identidade 'Autoridade Editorial' em 16:9 e 9:16."""
+    from PIL import Image, ImageOps
+
+    from auto_edit.workspace import workspace_root
+
+    with Image.open(photo) as f:
+        img = ImageOps.exif_transpose(f).convert("RGB")
+    try:
+        alpha = portrait.matte(img)
+    except (RuntimeError, ImportError) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    sig = signature if signature is not None else presenter.load_config().get("signature", "")
+    accent = portrait.topic_style(topic)["accent"]
+    outs = {}
+    for name, size in portrait.SIZES.items():
+        out = photo.with_name(f"{photo.stem}_{name}.png")
+        portrait.compose(img, alpha, size, word, title, highlight, accent, sig).save(out, "PNG")
+        outs[name] = out
+        console.print(f"[green]✓[/green] {out}")
+    if video:
+        ws = workspace_root() / video
+        pipeline = ws / "pipeline.json"
+        kind = "16x9"
+        if pipeline.is_file():
+            import json
+            kind = "16x9" if json.loads(pipeline.read_text(encoding="utf-8")).get("type") == "long" else "9x16"
+        for dst in (workspace_root() / "output" / f"{video}_thumbnail.png", ws / "thumbnail_custom.png"):
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(outs[kind].read_bytes())
+            console.print(f"[green]✓[/green] {dst}")
+        console.print("Capa no 1º quadro do vídeo: auto-edit resume <vídeo> --from thumbnail")

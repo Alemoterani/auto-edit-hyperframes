@@ -24,7 +24,7 @@ def test_prompt_has_topic_outfit_scene_and_identity_rules():
     p = portrait.build_prompt("finanças pessoais")
     assert portrait.TOPICS["finanças"]["outfit"] in p
     assert portrait.TOPICS["finanças"]["scene"] in p
-    assert portrait.IDENTITY_RULES in p
+    assert portrait.IDENTITY_RULES in p and portrait.RELIGHT in p and portrait.RETOUCH in p
 
 
 def test_unknown_topic_is_neutral_and_config_overrides(home):

@@ -64,9 +64,22 @@ TOPICS = {
 }
 
 IDENTITY_RULES = (
-    "Keep the person's face EXACTLY as in the photo: same face shape, eyes, nose, mouth, skin tone, hair, "
-    "facial hair and age. Do not beautify, slim, smooth, reshape or change identity in any way. "
+    "Keep the person's identity EXACTLY as in the photos: same face shape, eyes, nose, mouth, skin tone, hairline, "
+    "hair and facial hair style, and age. Do not slim, reshape, de-age or change identity in any way. "
     "Keep the same head pose and framing."
+)
+# Luz: a pessoa recebe a MESMA luz da cena (senão fica "colada" por cima do fundo)
+RELIGHT = (
+    "Relight the person so they truly belong in the scene, as if photographed on location with one camera: "
+    "light direction, color temperature and intensity come from the scene's own light sources; a rim/back light "
+    "from the brightest area of the background on hair, ears and shoulders; ambient fill tinted by the environment; "
+    "a soft, motivated key light on the face that is never brighter than the scene allows. Match contrast, black "
+    "levels, haze, grain and sharpness between person and background; one cinematic color grade on the whole image."
+)
+RETOUCH = (
+    "Professional retouch: remove blemishes, redness, oily shine and uneven tone while keeping real skin texture "
+    "and pores. Groom the beard and mustache in the same style and length: clean sharp cheek and neck lines, "
+    "even density, no stray hairs."
 )
 REFS_NOTE = (
     "The first image is the photo to edit. The other images are the same person from other angles: "
@@ -87,15 +100,14 @@ def topic_style(topic: str) -> dict:
 def build_prompt(topic: str, expression: str = "", scene: str = "", refs: int = 0) -> str:
     """Prompt da edição. ``expression``/``scene`` valem só para este vídeo; ``refs`` = fotos extras de identidade."""
     s = topic_style(topic)
-    face = (f"Only the facial expression changes, to: {expression}, with the same facial features. "
+    notes = presenter.load_config().get("identity", "")  # traços seus que o modelo costuma "arrumar" (entradas, textura)
+    face = (f"Change the facial expression to: {expression}, with the same facial features. "
             if expression else "Keep the same facial expression. ")
     return (
-        "Edit this photo into a professional portrait. "
-        f"{REFS_NOTE + ' ' if refs else ''}{IDENTITY_RULES} {face}"
-        f"Change ONLY: the clothing to {s['outfit']}, conveying authority; the background to {scene or s['scene']}, "
-        "shallow depth of field; the lighting to soft studio key light with a subtle rim light. "
-        "Correct exposure and white balance and remove only minor skin blemishes. "
-        "Photorealistic, natural, no filters, no text, no logos."
+        "Edit this photo into a professional, photorealistic portrait. "
+        f"{REFS_NOTE + ' ' if refs else ''}{IDENTITY_RULES} {notes + ' ' if notes else ''}{face}"
+        f"Clothing: {s['outfit']}, conveying authority. Background: {scene or s['scene']}, shallow depth of field. "
+        f"{RELIGHT} {RETOUCH} No text, no logos, no artificial filters."
     )
 
 

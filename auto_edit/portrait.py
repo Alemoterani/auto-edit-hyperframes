@@ -103,6 +103,11 @@ def _client():
     key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     if not key:
         raise RuntimeError("Defina GEMINI_API_KEY para trocar roupa/cenário")
+    try:  # HTTPS pelos certificados do Windows (antivírus/proxy que inspeciona TLS quebra o bundle do certifi)
+        import truststore
+        truststore.inject_into_ssl()
+    except ImportError:
+        pass
     try:
         from google import genai  # import tardio: dependência opcional (extra backdrop)
     except ImportError:

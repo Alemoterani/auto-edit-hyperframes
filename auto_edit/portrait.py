@@ -94,6 +94,12 @@ RELIGHT = (
     "a soft, motivated key light on the face that is never brighter than the scene allows. Match contrast, black "
     "levels, haze, grain and sharpness between person and background; one cinematic color grade on the whole image."
 )
+# Capa de que você gostou, mas com o rosto errado: o Gemini não troca rosto de forma fiel (testado), então ele só
+# devolve o cenário vazio; você entra depois pelo recorte da sua foto aprovada (thumb --background)
+CLEAN_SCENE = (
+    "Remove the person and all text and letters from this image completely. Fill those areas naturally with the "
+    "scene that would be behind them, keeping everything else identical: composition, objects, light and colors."
+)
 PHOTO = (
     "It must look like a real photograph, not CGI: full-frame camera, 85mm lens at f/1.8, natural light, crisp focus "
     "on the eyes, realistic skin texture and micro-detail, natural creamy bokeh, no plastic or airbrushed look."
@@ -120,11 +126,14 @@ def topic_style(topic: str) -> dict:
 
 
 def build_prompt(topic: str, expression: str = "", scene: str = "", refs: int = 0,
-                 aspect: str = "", elements: str = "", word: str = "") -> str:
+                 aspect: str = "", elements: str = "", word: str = "", clean_scene: bool = False) -> str:
     """Prompt da edição. ``expression``/``scene``/``elements``/``word`` valem só para este vídeo; ``refs`` = fotos
-    extras de identidade; ``aspect`` (16:9 ou 9:16) troca o retrato por uma cena de capa onde o tema domina."""
+    extras de identidade; ``aspect`` (16:9 ou 9:16) troca o retrato por uma cena de capa onde o tema domina;
+    ``clean_scene``: a imagem é uma capa de que você gostou; volta só o cenário, sem pessoa nem texto."""
     s = topic_style(topic)
     notes = presenter.load_config().get("identity", "")  # traços seus que o modelo costuma "arrumar" (entradas, textura)
+    if clean_scene:
+        return CLEAN_SCENE
     face = (f"Change the facial expression to: {expression}, with the same facial features. "
             if expression else "Keep the same facial expression. ")
     who = f"{REFS_NOTE + ' ' if refs else ''}{IDENTITY_RULES} {notes + ' ' if notes else ''}{face}"
@@ -168,13 +177,13 @@ def _open(path: Path) -> Image.Image:
 
 def dress(photo: Path, topic: str, out_dir: Path, n: int = 3, client=None, refs: list[Path] = (),
           expression: str = "", scene: str = "", aspect: str = "", elements: str = "",
-          word: str = "") -> list[Path]:
+          word: str = "", clean_scene: bool = False) -> list[Path]:
     """Gera ``n`` variantes da foto vestida/iluminada para o assunto. ``refs``: outras fotos suas (outros
     ângulos) que só servem para o modelo manter o rosto. Com ``aspect``, sai a cena de capa já no formato.
     Devolve os PNGs salvos."""
     client = client or _client()
     images = [_open(photo), *(_open(r) for r in refs)]  # o google-genai aceita a imagem PIL direto
-    contents = [*images, build_prompt(topic, expression, scene, len(refs), aspect, elements, word)]
+    contents = [*images, build_prompt(topic, expression, scene, len(refs), aspect, elements, word, clean_scene)]
     extra = {"config": {"response_modalities": ["IMAGE"], "image_config": {"aspect_ratio": aspect}}} if aspect else {}
     model = os.environ.get("AUTO_EDIT_IMAGE_MODEL", DEFAULT_MODEL)
     slug = (topic or "neutro").split()[0].lower() + (f"_{aspect.replace(':', 'x')}" if aspect else "")
@@ -197,9 +206,10 @@ def dress(photo: Path, topic: str, out_dir: Path, n: int = 3, client=None, refs:
 
 
 def matte(img: Image.Image) -> np.ndarray:
-    """Alpha (HxW float 0..1) de você na foto, com o RVM local."""
+    """Alpha (HxW float 0..1) de você na foto, com o RVM local, no processador (uma imagem só: não precisa de GPU)."""
+    import onnxruntime as ort  # dependência opcional (extra backdrop)
     frame = np.asarray(img.convert("RGB"))
-    m = backdrop.Matter()
+    m = backdrop.Matter(ort.InferenceSession(str(backdrop.ensure_model()), providers=["CPUExecutionProvider"]))
     for _ in range(backdrop.WARMUP):
         alpha = m.alpha(frame)
     return alpha
@@ -231,31 +241,45 @@ def _clean_plate(img: np.ndarray, alpha: np.ndarray, r: float) -> np.ndarray:
 def compose(
     portrait: Image.Image, alpha: np.ndarray | None, size: tuple[int, int], word: str, title: str,
     highlight: str = "", accent: tuple[int, int, int] = (255, 255, 255), signature: str = "",
+    background: Image.Image | None = None,
 ) -> Image.Image:
     """Capa no layout da identidade: 16:9 você à direita e texto à esquerda; 9:16 você no centro e texto embaixo.
-    ``alpha`` None = cena pronta do ``dress --aspect`` (você já integrado ao tema): só vinheta e tipografia."""
+    ``alpha`` None = cena pronta do ``dress --aspect`` (você já integrado ao tema): só vinheta e tipografia.
+    ``background``: cenário do tema (``dress --clean-scene``); você entra por cima, menor, para o tema dominar."""
     th = _thumb()
     if alpha is None:
         return _finish(th, np.asarray(backdrop.cover(portrait.convert("RGB"), size), np.float32) / 255.0,
                        title, highlight, signature)
+    if background is None and abs(portrait.width / portrait.height - size[0] / size[1]) < 0.03:
+        return _finish(th, _word_behind(th, portrait, alpha, size, word), title, highlight, signature)  # não mexe em você
     w, h = size
     wide = w > h
     src = np.asarray(portrait.convert("RGB"), dtype=np.float32) / 255.0
 
-    # Fundo: o cenário da foto sem você, desfocado, sem escurecer só ele (senão você fica colado por cima)
-    plate = _clean_plate(src, alpha, max(src.shape[:2]) / 25)
-    bg = backdrop.cover(Image.fromarray((plate * 255).astype(np.uint8)), size).filter(ImageFilter.GaussianBlur(6))
-    canvas = np.asarray(bg, dtype=np.float32) / 255.0  # mesma luz da foto: você e o cenário recebem o mesmo tratamento
+    if background is not None:  # o cenário do tema, nítido: ele é o protagonista
+        bg = backdrop.cover(background.convert("RGB"), size)
+    else:  # o cenário da própria foto sem você, desfocado, sem escurecer só ele (senão você fica colado por cima)
+        plate = _clean_plate(src, alpha, max(src.shape[:2]) / 25)
+        bg = backdrop.cover(Image.fromarray((plate * 255).astype(np.uint8)), size).filter(ImageFilter.GaussianBlur(6))
+    canvas = np.asarray(bg, dtype=np.float32) / 255.0
 
-    # Você: escala pela altura, base colada embaixo, centro do recorte na posição do layout
-    scale = h * (1.02 if wide else 0.80) / portrait.height
+    # Você: escala pela altura, base colada embaixo, centro do recorte na posição do layout. No cenário do tema, no
+    # 9:16 você fica menor, com o rosto no centro da tela, e o peito some na base escura onde vai o texto
+    scene_tall = background is not None and not wide
+    tall = (0.95 if wide else 0.48) if background is not None else (1.02 if wide else 0.80)
+    scale = h * tall / portrait.height
     pw, ph = round(portrait.width * scale), round(portrait.height * scale)
     person = np.asarray(portrait.convert("RGB").resize((pw, ph), Image.LANCZOS), dtype=np.float32) / 255.0
     pa = np.asarray(Image.fromarray((alpha * 255).astype(np.uint8)).resize((pw, ph), Image.BILINEAR),
                     dtype=np.float32) / 255.0
+    if background is not None:  # a foto acaba nas laterais (ombros cortados reto): esfuma as bordas
+        pa = pa * np.clip(np.minimum(np.arange(pw), np.arange(pw)[::-1]) / (0.08 * pw), 0, 1)[None, :]
+        if scene_tall:
+            pa = pa * np.clip((ph - np.arange(ph)) / (0.12 * ph), 0, 1)[:, None]
     cols, rows = np.nonzero(pa.max(0) > 0.5)[0], np.nonzero(pa.max(1) > 0.5)[0]
     cx = (cols[0] + cols[-1]) / 2 if cols.size else pw / 2
-    x0, y0 = round(w * (0.70 if wide else 0.5) - cx), h - ph
+    y0 = round(0.40 * h - (rows[0] if rows.size else 0)) if scene_tall else h - ph
+    x0 = round(w * (0.70 if wide else 0.5) - cx)
     head_top = y0 + (rows[0] if rows.size else 0)
     layer, A = np.zeros((h, w, 3), np.float32), np.zeros((h, w), np.float32)
     sx, sy = max(0, -x0), max(0, -y0)
@@ -268,45 +292,82 @@ def compose(
     # Palavra gigante atrás da cabeça (desenhada antes de você entrar)
     word = word.upper().strip()
     if word:
-        font_path = th._find_font(word)
-        font, _ = th._auto_size_font(font_path, word, int(w * (0.50 if wide else 0.92)),
-                                     max_size=int(h * (0.32 if wide else 0.22)), min_size=40, max_lines=1)
+        font = _fit_word(th, word, int(w * (0.50 if wide else 0.92)), int(h * (0.32 if wide else 0.22)))
         img = Image.fromarray((canvas * 255).astype(np.uint8)).convert("RGBA")
         txt = Image.new("RGBA", size)
-        b = font.getbbox(word)
-        wy = max(head_top + h * 0.05, (b[3] - b[1]) / 2 + h * 0.03)  # topo da palavra acima da cabeça, sem sair da tela
-        ImageDraw.Draw(txt).text((w * (0.70 if wide else 0.5), wy), word, font=font,
-                                 fill=(*WORD_COLOR, 235), anchor="mm")
+        cap = -font.getbbox(word, anchor="ls")[1]
+        baseline = max(head_top + 0.2 * cap, cap + h * 0.03)  # a cabeça cobre só a base das letras: a palavra se lê
+        ImageDraw.Draw(txt).text((w * (0.70 if wide else 0.5), baseline), word, font=font,
+                                 fill=(*WORD_COLOR, 245), anchor="ms")
         canvas = np.asarray(Image.alpha_composite(img, txt).convert("RGB"), dtype=np.float32) / 255.0
+
+    if background is not None:  # sua foto veio de outra luz: puxa cor e contraste para os do cenário
+        m = A > 0.5
+        if m.any():
+            mp, sp = layer[m].mean(0), layer[m].std(0) + 1e-3
+            ms, ss = canvas.mean((0, 1)), canvas.std((0, 1)) + 1e-3
+            layer = np.clip((layer - mp) / sp * (0.75 * sp + 0.25 * ss) + 0.75 * mp + 0.25 * ms, 0, 1)
 
     # Rim light: halo na cor do assunto em volta do recorte
     acc = np.array(accent, np.float32) / 255.0
-    halo = np.clip(_blur(A, 10) - A, 0, 1) * 0.3  # sutil: forte demais te descola do fundo
+    halo = np.clip(_blur(A, 10) - A, 0, 1) * (0.12 if background is not None else 0.3)  # forte demais te descola
     canvas = np.clip(canvas + halo[..., None] * acc, 0, 1)
     canvas = layer * A[..., None] + canvas * (1 - A[..., None])
     edge = A * np.clip(1 - _blur(A, 4) * 1.15, 0, 1) * 0.2  # luz de contorno por dentro da borda
     canvas = np.clip(canvas + edge[..., None] * acc, 0, 1)
-    return _finish(th, canvas, title, highlight, signature)
+    return _finish(th, canvas, title, highlight, signature, text_bottom=0.95 if scene_tall else None)
 
 
-def _finish(th, canvas: np.ndarray, title: str, highlight: str, signature: str) -> Image.Image:
-    """Vinheta + base escura onde vai o texto, e a tipografia da marca por cima."""
+def _fit_word(th, word: str, max_w: int, max_size: int):
+    """Fonte da palavra gigante no maior tamanho que cabe em ``max_w`` (uma palavra nunca quebra linha, então o
+    ``_auto_size_font`` sozinho a deixava sair da tela)."""
+    path = th._find_font(word)
+    font = th._load_font(path, max_size)
+    width = font.getlength(word)
+    return font if width <= max_w else th._load_font(path, max(40, int(max_size * max_w / width)))
+
+
+def _word_behind(th, img: Image.Image, alpha: np.ndarray, size: tuple[int, int], word: str) -> np.ndarray:
+    """Palavra gigante desenhada no cenário e você de volta por cima, no mesmo lugar: a cabeça cobre só a base das
+    letras (~20% da altura), então a palavra continua legível."""
+    w, h = size
+    src = backdrop.cover(img.convert("RGB"), size)
+    a = np.asarray(backdrop.cover(Image.fromarray((alpha * 255).astype(np.uint8)), size), np.float32) / 255.0
+    rows = np.nonzero(a.max(1) > 0.5)[0]
+    head_top = rows[0] if rows.size else h // 2
+    word = word.upper().strip()
+    font = _fit_word(th, word, int(w * (0.5 if w > h else 0.92)), int(h * (0.32 if w > h else 0.2)))
+    cap = -font.getbbox(word, anchor="ls")[1]  # altura da letra acima da linha de base
+    baseline = max(head_top + 0.2 * cap, cap + h * 0.03)
+    layer = Image.new("RGBA", size)
+    ImageDraw.Draw(layer).text((w * (0.70 if w > h else 0.5), baseline), word, font=font,
+                               fill=(*WORD_COLOR, 245), anchor="ms")
+    scene = np.asarray(Image.alpha_composite(src.convert("RGBA"), layer).convert("RGB"), np.float32) / 255.0
+    person = np.asarray(src, np.float32) / 255.0
+    return person * a[..., None] + scene * (1 - a[..., None])
+
+
+def _finish(th, canvas: np.ndarray, title: str, highlight: str, signature: str,
+            text_bottom: float | None = None) -> Image.Image:
+    """Vinheta + base escura onde vai o texto, e a tipografia da marca por cima. ``text_bottom``: onde o bloco de
+    texto termina no 9:16 (fração da altura; padrão = fim da zona segura do Instagram)."""
     h, w = canvas.shape[:2]
     wide = w > h
     yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
     vig = 1 - 0.35 * (((xx / w - 0.5) ** 2 + (yy / h - 0.5) ** 2) / 0.5)
-    start = 0.6 if wide else 0.55
+    start = 0.6 if wide else (text_bottom - 0.3 if text_bottom else 0.55)
     fade = np.clip((yy / h - start) / (1 - start), 0, 1) * (0.5 if wide else 0.75)
     if wide:  # o texto fica à esquerda: escurece a metade esquerda também
         fade = np.maximum(fade, np.clip((0.55 - xx / w) / 0.55, 0, 1) * 0.6)
     canvas = canvas * vig[..., None] * (1 - fade[..., None])
     out = Image.fromarray((np.clip(canvas, 0, 1) * 255).astype(np.uint8))
 
-    _draw_text(th, out, title.upper().strip(), highlight.upper().strip(), signature, wide)
+    _draw_text(th, out, title.upper().strip(), highlight.upper().strip(), signature, wide, text_bottom)
     return out
 
 
-def _draw_text(th, img: Image.Image, title: str, highlight: str, signature: str, wide: bool) -> None:
+def _draw_text(th, img: Image.Image, title: str, highlight: str, signature: str, wide: bool,
+               text_bottom: float | None = None) -> None:
     """Faixa amarela (gancho) + título branco: à esquerda no 16:9, embaixo na zona segura no 9:16."""
     w, h = img.size
     d = ImageDraw.Draw(img)
@@ -328,7 +389,7 @@ def _draw_text(th, img: Image.Image, title: str, highlight: str, signature: str,
 
     gap = int(h * 0.02)
     total = sum(len(ls) * int(line_h(f) * (1.6 if k == "bar" else 1.12)) for k, f, ls in blocks) + gap * len(blocks)
-    y = (h - total) // 2 if wide else int(h * th.IG_SAFE_BOT) - total
+    y = (h - total) // 2 if wide else int(h * (text_bottom or th.IG_SAFE_BOT)) - total
     for kind, f, lines in blocks:
         lh = line_h(f)
         for line in lines:

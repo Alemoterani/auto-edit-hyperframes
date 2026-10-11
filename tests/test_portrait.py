@@ -110,3 +110,20 @@ def test_compose_ready_scene_only_adds_typography():
     out = portrait.compose(img, None, (1280, 720), "", "o brasil já tem dono", "ninguém te conta")
     assert out.size == (1280, 720)
     assert (np.abs(np.asarray(out).reshape(-1, 3) - portrait.HIGHLIGHT).sum(1) < 10).any()
+
+
+def test_compose_puts_you_into_theme_background():
+    photo = Image.new("RGB", (400, 400), (200, 150, 120))
+    alpha = np.zeros((400, 400), np.float32)
+    alpha[40:, 120:280] = 1.0
+    scene = Image.new("RGB", (540, 960), (30, 40, 70))
+    out = portrait.compose(photo, alpha, (1080, 1920), "soberania", "o brasil já tem dono", "ninguém te conta",
+                           background=scene)
+    assert out.size == (1080, 1920)
+    assert (np.abs(np.asarray(out).reshape(-1, 3) - portrait.HIGHLIGHT).sum(1) < 10).any()
+
+
+def test_fit_word_never_wider_than_the_frame():
+    th = portrait._thumb()
+    font = portrait._fit_word(th, "SOBERANIA", 900, 600)
+    assert font.getlength("SOBERANIA") <= 905

@@ -107,6 +107,7 @@ def dress(
     aspect: str = typer.Option("", "--aspect", help="16:9 ou 9:16: gera a cena de capa (tema em destaque, você integrado, espaço para o texto)"),
     elements: str = typer.Option("", "--elements", help="Elementos do tema atrás de você (ex.: 'guindastes, contêineres, torres de energia')"),
     word: str = typer.Option("", "--word", help="Palavra gigante atrás da cabeça, desenhada pelo próprio Gemini (só com --aspect)"),
+    clean_scene: bool = typer.Option(False, "--clean-scene", help="A foto é uma capa de que você gostou: devolve só o cenário, sem pessoa nem texto (use no thumb --background)"),
 ) -> None:
     """Veste e ilumina você conforme o assunto (Gemini; o rosto não muda). Escolha a variante mais fiel."""
     if aspect and aspect not in portrait.LAYOUTS:
@@ -114,7 +115,8 @@ def dress(
         raise typer.Exit(1)
     try:
         saved = portrait.dress(photo, topic, out_dir or photo.parent, n=n, refs=ref or [],
-                               expression=expression, scene=scene, aspect=aspect, elements=elements, word=word)
+                               expression=expression, scene=scene, aspect=aspect, elements=elements, word=word,
+                               clean_scene=clean_scene)
     except RuntimeError as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
@@ -133,6 +135,7 @@ def thumb(
     topic: str = typer.Option("", "--topic", help="Assunto (cor da luz de contorno)"),
     video: Optional[str] = typer.Option(None, "--video", help="Nome do vídeo no workspace: salva a capa lá também"),
     signature: Optional[str] = typer.Option(None, "--signature", help="Seu nome/@ no canto (padrão: 'signature' do presenter.json)"),
+    background: Optional[Path] = typer.Option(None, "--background", "-b", exists=True, dir_okay=False, help="Cenário do tema (dress --clean-scene): você entra recortado da foto, menor"),
 ) -> None:
     """Capa na identidade 'Autoridade Editorial' em 16:9 e 9:16."""
     from PIL import Image, ImageOps
@@ -141,7 +144,18 @@ def thumb(
 
     with Image.open(photo) as f:
         img = ImageOps.exif_transpose(f).convert("RGB")
+    bg = None
+    if background:
+        with Image.open(background) as f:
+            bg = f.convert("RGB")
+    ref = bg or img  # o formato da capa vem do cenário quando há um
     sizes = portrait.SIZES
+    name = min(sizes, key=lambda k: abs(sizes[k][0] / sizes[k][1] - ref.width / ref.height))
+    if bg is not None and not word:
+        console.print("[red]--background precisa de --word (o recorte é que põe você no cenário)[/red]")
+        raise typer.Exit(1)
+    if not word or abs(sizes[name][0] / sizes[name][1] - ref.width / ref.height) < 0.03:
+        sizes = {name: sizes[name]}  # cena pronta: só o formato dela (cortar 16:9 em 9:16 tiraria o tema)
     alpha = None
     if word:
         try:
@@ -149,15 +163,12 @@ def thumb(
         except (RuntimeError, ImportError) as e:
             console.print(f"[red]{e}[/red]")
             raise typer.Exit(1)
-    else:  # cena pronta: só o formato dela (cortar 16:9 em 9:16 tiraria o tema)
-        name = min(sizes, key=lambda k: abs(sizes[k][0] / sizes[k][1] - img.width / img.height))
-        sizes = {name: sizes[name]}
     sig = signature if signature is not None else presenter.load_config().get("signature", "")
     accent = portrait.topic_style(topic)["accent"]
     outs = {}
     for name, size in sizes.items():
         out = photo.with_name(f"{photo.stem}_{name}.png")
-        portrait.compose(img, alpha, size, word, title, highlight, accent, sig).save(out, "PNG")
+        portrait.compose(img, alpha, size, word, title, highlight, accent, sig, background=bg).save(out, "PNG")
         outs[name] = out
         console.print(f"[green]✓[/green] {out}")
     if video:

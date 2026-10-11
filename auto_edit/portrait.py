@@ -23,7 +23,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
 from auto_edit import backdrop, presenter
 
-DEFAULT_MODEL = "gemini-2.5-flash-image"  # AUTO_EDIT_IMAGE_MODEL troca quando o Google aposentar este
+DEFAULT_MODEL = "gemini-3-pro-image"  # o flash deixava o rosto com cara de IA; AUTO_EDIT_IMAGE_MODEL troca
 HIGHLIGHT = (255, 212, 0)                 # #FFD400: a faixa da marca, igual em todo assunto
 WORD_COLOR = (238, 236, 230)
 SIZES = {"16x9": (1280, 720), "9x16": (1080, 1920)}
@@ -65,8 +65,26 @@ TOPICS = {
 
 IDENTITY_RULES = (
     "Keep the person's identity EXACTLY as in the photos: same face shape, eyes, nose, mouth, skin tone, hairline, "
-    "hair and facial hair style, and age. Do not slim, reshape, de-age or change identity in any way. "
-    "Keep the same head pose and framing."
+    "hair and facial hair style, and age. Do not slim, reshape, de-age or change identity in any way."
+)
+# Cena de capa (dress --aspect): como nas referências, o TEMA é o protagonista e você é um elemento dele
+LAYOUTS = {
+    "16:9": (
+        "Wide 16:9 YouTube thumbnail scene. The THEME is the hero, not the person: the theme elements fill the "
+        "frame, bold, dramatic and readable at small size. The person is a supporting element on the right third, "
+        "waist-up, about 55% of the frame height, cut by the bottom edge. Keep the left 45% of the frame darker and "
+        "calmer (no faces, no busy detail) for a headline added later."
+    ),
+    "9:16": (
+        "Vertical 9:16 thumbnail scene. The THEME is the hero, not the person: the theme elements fill the upper two "
+        "thirds, bold, dramatic and readable at small size. The person is a supporting element, centered, waist-up, "
+        "about 45% of the frame height, cut by the bottom edge. Keep the bottom 30% darker and calmer for a headline "
+        "added later."
+    ),
+}
+INTEGRATE = (
+    "Integrate the person completely into the scene: same light, haze and color grade, partly in shadow, never "
+    "brighter, sharper or more saturated than the theme elements; the eye goes to the theme first, then to him."
 )
 # Luz: a pessoa recebe a MESMA luz da cena (senão fica "colada" por cima do fundo)
 RELIGHT = (
@@ -75,6 +93,10 @@ RELIGHT = (
     "from the brightest area of the background on hair, ears and shoulders; ambient fill tinted by the environment; "
     "a soft, motivated key light on the face that is never brighter than the scene allows. Match contrast, black "
     "levels, haze, grain and sharpness between person and background; one cinematic color grade on the whole image."
+)
+PHOTO = (
+    "It must look like a real photograph, not CGI: full-frame camera, 85mm lens at f/1.8, natural light, crisp focus "
+    "on the eyes, realistic skin texture and micro-detail, natural creamy bokeh, no plastic or airbrushed look."
 )
 RETOUCH = (
     "Professional retouch: remove blemishes, redness, oily shine and uneven tone while keeping real skin texture "
@@ -97,17 +119,29 @@ def topic_style(topic: str) -> dict:
     return style
 
 
-def build_prompt(topic: str, expression: str = "", scene: str = "", refs: int = 0) -> str:
-    """Prompt da edição. ``expression``/``scene`` valem só para este vídeo; ``refs`` = fotos extras de identidade."""
+def build_prompt(topic: str, expression: str = "", scene: str = "", refs: int = 0,
+                 aspect: str = "", elements: str = "", word: str = "") -> str:
+    """Prompt da edição. ``expression``/``scene``/``elements``/``word`` valem só para este vídeo; ``refs`` = fotos
+    extras de identidade; ``aspect`` (16:9 ou 9:16) troca o retrato por uma cena de capa onde o tema domina."""
     s = topic_style(topic)
     notes = presenter.load_config().get("identity", "")  # traços seus que o modelo costuma "arrumar" (entradas, textura)
     face = (f"Change the facial expression to: {expression}, with the same facial features. "
             if expression else "Keep the same facial expression. ")
+    who = f"{REFS_NOTE + ' ' if refs else ''}{IDENTITY_RULES} {notes + ' ' if notes else ''}{face}"
+    wear = f"Clothing: {s['outfit']}, conveying authority. "
+    if aspect in LAYOUTS:
+        text = (f'Behind the person\'s head, huge bold condensed off-white letters spelling exactly "{word}", '
+                "partially hidden by the head, lit and graded like the scene. No other text, no logos."
+                if word else "No text, no logos.")
+        return (
+            f"Create a photorealistic thumbnail scene featuring this person. {LAYOUTS[aspect]} "
+            f"{'Theme elements: ' + elements + '. ' if elements else ''}Setting: {scene or s['scene']}. "
+            f"{who}{wear}{INTEGRATE} {RELIGHT} {PHOTO} {RETOUCH} {text}"
+        )
     return (
-        "Edit this photo into a professional, photorealistic portrait. "
-        f"{REFS_NOTE + ' ' if refs else ''}{IDENTITY_RULES} {notes + ' ' if notes else ''}{face}"
-        f"Clothing: {s['outfit']}, conveying authority. Background: {scene or s['scene']}, shallow depth of field. "
-        f"{RELIGHT} {RETOUCH} No text, no logos, no artificial filters."
+        "Edit this photo into a professional, photorealistic portrait. Keep the same head pose and framing. "
+        f"{who}{wear}Background: {scene or s['scene']}, shallow depth of field. "
+        f"{RELIGHT} {PHOTO} {RETOUCH} No text, no logos, no artificial filters."
     )
 
 
@@ -133,18 +167,21 @@ def _open(path: Path) -> Image.Image:
 
 
 def dress(photo: Path, topic: str, out_dir: Path, n: int = 3, client=None, refs: list[Path] = (),
-          expression: str = "", scene: str = "") -> list[Path]:
+          expression: str = "", scene: str = "", aspect: str = "", elements: str = "",
+          word: str = "") -> list[Path]:
     """Gera ``n`` variantes da foto vestida/iluminada para o assunto. ``refs``: outras fotos suas (outros
-    ângulos) que só servem para o modelo manter o rosto. Devolve os PNGs salvos."""
+    ângulos) que só servem para o modelo manter o rosto. Com ``aspect``, sai a cena de capa já no formato.
+    Devolve os PNGs salvos."""
     client = client or _client()
     images = [_open(photo), *(_open(r) for r in refs)]  # o google-genai aceita a imagem PIL direto
-    contents = [*images, build_prompt(topic, expression, scene, refs=len(refs))]
+    contents = [*images, build_prompt(topic, expression, scene, len(refs), aspect, elements, word)]
+    extra = {"config": {"response_modalities": ["IMAGE"], "image_config": {"aspect_ratio": aspect}}} if aspect else {}
     model = os.environ.get("AUTO_EDIT_IMAGE_MODEL", DEFAULT_MODEL)
-    slug = (topic or "neutro").split()[0].lower()
+    slug = (topic or "neutro").split()[0].lower() + (f"_{aspect.replace(':', 'x')}" if aspect else "")
     out_dir.mkdir(parents=True, exist_ok=True)
     saved = []
     for i in range(1, n + 1):
-        resp = client.models.generate_content(model=model, contents=contents)
+        resp = client.models.generate_content(model=model, contents=contents, **extra)
         parts = resp.candidates[0].content.parts if resp.candidates else []
         data = next((p.inline_data.data for p in parts if getattr(p, "inline_data", None)), None)
         if data is None:
@@ -192,11 +229,15 @@ def _clean_plate(img: np.ndarray, alpha: np.ndarray, r: float) -> np.ndarray:
 
 
 def compose(
-    portrait: Image.Image, alpha: np.ndarray, size: tuple[int, int], word: str, title: str,
+    portrait: Image.Image, alpha: np.ndarray | None, size: tuple[int, int], word: str, title: str,
     highlight: str = "", accent: tuple[int, int, int] = (255, 255, 255), signature: str = "",
 ) -> Image.Image:
-    """Capa no layout da identidade: 16:9 você à direita e texto à esquerda; 9:16 você no centro e texto embaixo."""
+    """Capa no layout da identidade: 16:9 você à direita e texto à esquerda; 9:16 você no centro e texto embaixo.
+    ``alpha`` None = cena pronta do ``dress --aspect`` (você já integrado ao tema): só vinheta e tipografia."""
     th = _thumb()
+    if alpha is None:
+        return _finish(th, np.asarray(backdrop.cover(portrait.convert("RGB"), size), np.float32) / 255.0,
+                       title, highlight, signature)
     w, h = size
     wide = w > h
     src = np.asarray(portrait.convert("RGB"), dtype=np.float32) / 255.0
@@ -245,8 +286,13 @@ def compose(
     canvas = layer * A[..., None] + canvas * (1 - A[..., None])
     edge = A * np.clip(1 - _blur(A, 4) * 1.15, 0, 1) * 0.2  # luz de contorno por dentro da borda
     canvas = np.clip(canvas + edge[..., None] * acc, 0, 1)
+    return _finish(th, canvas, title, highlight, signature)
 
-    # Vinheta + base escura para o texto
+
+def _finish(th, canvas: np.ndarray, title: str, highlight: str, signature: str) -> Image.Image:
+    """Vinheta + base escura onde vai o texto, e a tipografia da marca por cima."""
+    h, w = canvas.shape[:2]
+    wide = w > h
     yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
     vig = 1 - 0.35 * (((xx / w - 0.5) ** 2 + (yy / h - 0.5) ** 2) / 0.5)
     start = 0.6 if wide else 0.55

@@ -147,16 +147,19 @@ auto-edit presenter status
 ```
 
 **Capa "Autoridade Editorial" a partir de uma foto sua** (`auto_edit/portrait.py`): o `dress` manda a foto ao
-Gemini (`GEMINI_API_KEY`, modelo em `AUTO_EDIT_IMAGE_MODEL`, default `gemini-2.5-flash-image`) trocando SÓ roupa,
+Gemini (`GEMINI_API_KEY`, modelo em `AUTO_EDIT_IMAGE_MODEL`, default `gemini-3-pro-image`) trocando SÓ roupa,
 cenário e luz conforme o assunto — rosto, pele e cabelo preservados; você escolhe a variante mais fiel. O `thumb`
 recorta local (RVM) e monta 16:9 + 9:16: palavra gigante atrás da cabeça, rim light na cor do assunto, faixa amarela
 `#FFD400` (fixa da marca) e título branco. Roupa/cenário por assunto em `portrait.TOPICS`; `presenter.json` sobrescreve
-(`topics.<assunto>.outfit/scene/accent`) e define `signature` (nome/@ no canto).
+(`topics.<assunto>.outfit/scene/accent`), define `signature` (nome/@ no canto) e `identity` (traços que o modelo
+tende a "arrumar": entradas, textura do cabelo). Com `--aspect 16:9|9:16` o `dress` já gera a **cena de capa**, como nas
+referências: o tema domina (`--elements`), você fica menor e integrado à luz, sobra espaço para o texto e `--word` pede a
+palavra atrás da cabeça ao próprio Gemini (confira a grafia). Aí o `thumb` sem `--word` só põe a tipografia, sem recorte.
 
 ```bash
 auto-edit presenter dress foto.jpg --topic finanças -n 3 --ref perfil.jpg --expression "sério, cético"  # foto_finanças_1..3.png
-auto-edit presenter thumb foto_finanças_2.png --topic finanças --word JUROS \
-  --title "Quem paga a conta" --highlight "Ninguém te conta" --video "A Padaria"
+auto-edit presenter dress foto.jpg --topic política --aspect 16:9 --elements "guindastes, contêineres" --word SOBERANIA
+auto-edit presenter thumb foto_política_16x9_1.png --title "O Brasil já tem dono" --highlight "Ninguém te conta"
 ```
 
 Config em `~/.auto-edit/presenter.json`. Com `--backdrop` o `edited_video.mp4` é trocado (o corte original fica em

@@ -104,11 +104,17 @@ def dress(
     ref: Optional[List[Path]] = typer.Option(None, "--ref", exists=True, dir_okay=False, help="Outra foto sua (outro ângulo) só para manter o rosto; repita a opção"),
     expression: str = typer.Option("", "--expression", help="Expressão para este vídeo (ex.: 'sério, cético, uma sobrancelha levantada')"),
     scene: str = typer.Option("", "--scene", help="Cenário só deste vídeo (sobrescreve o do assunto)"),
+    aspect: str = typer.Option("", "--aspect", help="16:9 ou 9:16: gera a cena de capa (tema em destaque, você integrado, espaço para o texto)"),
+    elements: str = typer.Option("", "--elements", help="Elementos do tema atrás de você (ex.: 'guindastes, contêineres, torres de energia')"),
+    word: str = typer.Option("", "--word", help="Palavra gigante atrás da cabeça, desenhada pelo próprio Gemini (só com --aspect)"),
 ) -> None:
     """Veste e ilumina você conforme o assunto (Gemini; o rosto não muda). Escolha a variante mais fiel."""
+    if aspect and aspect not in portrait.LAYOUTS:
+        console.print(f"[red]--aspect deve ser {' ou '.join(portrait.LAYOUTS)}[/red]")
+        raise typer.Exit(1)
     try:
         saved = portrait.dress(photo, topic, out_dir or photo.parent, n=n, refs=ref or [],
-                               expression=expression, scene=scene)
+                               expression=expression, scene=scene, aspect=aspect, elements=elements, word=word)
     except RuntimeError as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
@@ -121,7 +127,7 @@ def dress(
 @presenter_app.command()
 def thumb(
     photo: Path = typer.Argument(..., exists=True, dir_okay=False, help="Foto escolhida (saída do dress)"),
-    word: str = typer.Option(..., "--word", "-w", help="Palavra gigante atrás da cabeça"),
+    word: str = typer.Option("", "--word", "-w", help="Palavra gigante atrás da cabeça (recorte local). Vazio = cena pronta do dress --aspect: só o texto por cima"),
     title: str = typer.Option(..., "--title", help="Título branco"),
     highlight: str = typer.Option("", "--highlight", help="Gancho na faixa amarela"),
     topic: str = typer.Option("", "--topic", help="Assunto (cor da luz de contorno)"),
@@ -135,15 +141,21 @@ def thumb(
 
     with Image.open(photo) as f:
         img = ImageOps.exif_transpose(f).convert("RGB")
-    try:
-        alpha = portrait.matte(img)
-    except (RuntimeError, ImportError) as e:
-        console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+    sizes = portrait.SIZES
+    alpha = None
+    if word:
+        try:
+            alpha = portrait.matte(img)
+        except (RuntimeError, ImportError) as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(1)
+    else:  # cena pronta: só o formato dela (cortar 16:9 em 9:16 tiraria o tema)
+        name = min(sizes, key=lambda k: abs(sizes[k][0] / sizes[k][1] - img.width / img.height))
+        sizes = {name: sizes[name]}
     sig = signature if signature is not None else presenter.load_config().get("signature", "")
     accent = portrait.topic_style(topic)["accent"]
     outs = {}
-    for name, size in portrait.SIZES.items():
+    for name, size in sizes.items():
         out = photo.with_name(f"{photo.stem}_{name}.png")
         portrait.compose(img, alpha, size, word, title, highlight, accent, sig).save(out, "PNG")
         outs[name] = out
@@ -155,6 +167,9 @@ def thumb(
         if pipeline.is_file():
             import json
             kind = "16x9" if json.loads(pipeline.read_text(encoding="utf-8")).get("type") == "long" else "9x16"
+        if kind not in outs:
+            console.print(f"[yellow]Este vídeo usa capa {kind}: rode o thumb com a cena nesse formato[/yellow]")
+            raise typer.Exit(1)
         for dst in (workspace_root() / "output" / f"{video}_thumbnail.png", ws / "thumbnail_custom.png"):
             dst.parent.mkdir(parents=True, exist_ok=True)
             dst.write_bytes(outs[kind].read_bytes())

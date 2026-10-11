@@ -44,8 +44,9 @@ class FakeClient:
         self.calls = []
         self.models = self
 
-    def generate_content(self, model, contents):
+    def generate_content(self, model, contents, config=None):
         self.calls.append((model, contents))
+        self.config = config
         if len(self.calls) == 2:
             return SimpleNamespace(candidates=[SimpleNamespace(content=SimpleNamespace(parts=[]))])
         buf = BytesIO()
@@ -89,3 +90,23 @@ def test_compose_outputs_layout_size_with_highlight_bar(size):
     assert out.size == size and out.mode == "RGB"
     px = np.asarray(out).reshape(-1, 3)
     assert (np.abs(px - portrait.HIGHLIGHT).sum(1) < 10).any()  # a faixa amarela da marca está lá
+
+
+def test_dress_aspect_builds_theme_scene_and_asks_that_ratio(tmp_path):
+    photo = tmp_path / "eu.jpg"
+    Image.new("RGB", (40, 60)).save(photo)
+    client = FakeClient()
+    saved = portrait.dress(photo, "política", tmp_path, n=1, client=client, aspect="16:9",
+                           elements="guindastes e contêineres", word="SOBERANIA")
+    prompt = client.calls[0][1][-1]
+    assert portrait.LAYOUTS["16:9"] in prompt and portrait.INTEGRATE in prompt
+    assert "guindastes e contêineres" in prompt and '"SOBERANIA"' in prompt
+    assert client.config["image_config"] == {"aspect_ratio": "16:9"}
+    assert saved[0].name == "eu_política_16x9_1.png"
+
+
+def test_compose_ready_scene_only_adds_typography():
+    img = Image.new("RGB", (1280, 720), (90, 60, 40))
+    out = portrait.compose(img, None, (1280, 720), "", "o brasil já tem dono", "ninguém te conta")
+    assert out.size == (1280, 720)
+    assert (np.abs(np.asarray(out).reshape(-1, 3) - portrait.HIGHLIGHT).sum(1) < 10).any()

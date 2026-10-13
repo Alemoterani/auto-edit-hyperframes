@@ -280,8 +280,8 @@ class TestResult:
     def _done(self, tmp_path, monkeypatch, *, files=("_final.mp4",), metadata=None):
         monkeypatch.setattr(engine, "library_root", lambda: tmp_path)
         ws = _mkws(tmp_path, "vid", video_name="minha-live", current_stage="done")
-        out = tmp_path / "output"
-        out.mkdir(exist_ok=True)
+        out = tmp_path / "output" / "vid"
+        out.mkdir(parents=True, exist_ok=True)
         for suffix in files:
             (out / f"minha-live{suffix}").write_bytes(b"data")
         if metadata is not None:
@@ -498,8 +498,8 @@ class TestBrowseEndpoint:
     def test_file_endpoint_streams_the_video(self, tmp_path, monkeypatch):
         monkeypatch.setenv("AUTO_EDIT_WORKSPACE", str(tmp_path))
         _mkws(tmp_path, "vid", video_name="clip")
-        (tmp_path / "output").mkdir()
-        (tmp_path / "output" / "clip_final.mp4").write_bytes(b"fake-mp4-bytes")
+        (tmp_path / "output" / "vid").mkdir(parents=True)
+        (tmp_path / "output" / "vid" / "clip_final.mp4").write_bytes(b"fake-mp4-bytes")
         r = self._client().get("/api/videos/vid/file/video")
         assert r.status_code == 200 and r.data == b"fake-mp4-bytes"
         assert r.headers["Content-Type"].startswith("video/mp4")
@@ -529,8 +529,8 @@ class TestOpenArtifact:
     def _setup(self, tmp_path, monkeypatch):
         monkeypatch.setattr(engine, "library_root", lambda: tmp_path)
         _mkws(tmp_path, "vid", video_name="clip")
-        (tmp_path / "output").mkdir()
-        video = tmp_path / "output" / "clip_final.mp4"
+        (tmp_path / "output" / "vid").mkdir(parents=True)
+        video = tmp_path / "output" / "vid" / "clip_final.mp4"
         video.write_bytes(b"x")
         return video
 
@@ -578,7 +578,7 @@ def test_file_endpoint_with_relative_library_root(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("AUTO_EDIT_WORKSPACE", "workspace")
     _mkws(tmp_path / "workspace", "vid", video_name="clip")
-    (tmp_path / "workspace" / "output").mkdir()
-    (tmp_path / "workspace" / "output" / "clip_thumbnail.png").write_bytes(b"png")
+    (tmp_path / "workspace" / "output" / "vid").mkdir(parents=True)
+    (tmp_path / "workspace" / "output" / "vid" / "clip_thumbnail.png").write_bytes(b"png")
     r = api.create_app().test_client().get("/api/videos/vid/file/thumbnail")
     assert r.status_code == 200 and r.data == b"png"

@@ -53,4 +53,4 @@ Mostra o status de todos os pipelines de edição de vídeo no projeto.
 
 - Se não existir nenhum workspace, avisar que nenhum pipeline foi iniciado ainda.
 - Ordenar por `created_at` do pipeline.json (mais recente primeiro).
-- Se o campo `current_stage` for `"done"`, buscar o arquivo final em `output/` e mostrar o nome.
+- Se o campo `current_stage` for `"done"`, buscar o arquivo final em `output/<nome-do-projeto>/` e mostrar o nome.

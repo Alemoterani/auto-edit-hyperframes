@@ -9,6 +9,7 @@ import typer
 from rich.console import Console
 
 from auto_edit import cover
+from auto_edit import pipeline as pl
 from auto_edit.workspace import workspace_root
 
 cover_app = typer.Typer(help="Capa do vídeo em motion graphics, só com as informações do vídeo (sem você).")
@@ -113,5 +114,5 @@ def make(
     except (RuntimeError, OSError) as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
-    for p in (png, hook, *cover.publish_png(png, ws, name, workspace_root() / "output")):
+    for p in (png, hook, *cover.publish_png(png, ws, name, pl.output_dir(ws))):
         console.print(f"[green]✓[/green] {p}")

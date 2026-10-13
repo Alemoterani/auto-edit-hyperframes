@@ -102,6 +102,8 @@ decrescente e marca os candidatos que se sobrepõem.
 | `ralph.sh` | Orquestrador bash que executa o pipeline stage-by-stage |
 | `assets/` | Fontes, overlays, sons para composição de vídeo |
 | `hyperframes/` | Templates HTML (overlays `lower_third`/`cta`/`highlight` + `captions`) renderizados com alpha por `auto_edit/hyperframes.py` via `npx hyperframes` |
+| `workspace/<projeto>/` | Pasta de trabalho de cada projeto (JSONs, intermediários, `cover/`, logs) |
+| `workspace/output/<projeto>/` | Entregas de cada projeto: `_final.mp4`, `_thumbnail.png`, `.srt`, `.txt` (`pipeline.output_dir`) |
 
 ## Convenções
 
@@ -168,7 +170,7 @@ auto-edit cover make "Meu vídeo" --pick 2,5,7 --word SOBERANIA --highlight "Nin
 ```
 
 O `make` grava `cover/cover.json` (o stage `thumbnail` passa a usar esses dados), `thumbnail_custom.png`,
-`output/<nome>_thumbnail.png` e a prévia `cover/abertura.mp4`. Funciona antes de o vídeo existir: basta o nome da
+`output/<nome>/<nome>_thumbnail.png` e a prévia `cover/abertura.mp4`. Funciona antes de o vídeo existir: basta o nome da
 pasta ser o mesmo do vídeo.
 
 ## Slash Commands Disponíveis

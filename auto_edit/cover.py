@@ -130,7 +130,7 @@ def preview(mov: Path, out: Path) -> Path:
 
 
 def publish_png(png: Path, workspace: Path, name: str, output_dir: Path) -> list[Path]:
-    """Capa pronta nos dois lugares que o pipeline usa: ``thumbnail_custom.png`` e ``output/<nome>_thumbnail.png``."""
+    """Capa pronta nos dois lugares que o pipeline usa: ``thumbnail_custom.png`` e ``output/<projeto>/<nome>_thumbnail.png``."""
     dsts = [workspace / "thumbnail_custom.png", output_dir / f"{name}_thumbnail.png"]
     for d in dsts:
         d.parent.mkdir(parents=True, exist_ok=True)

@@ -197,13 +197,19 @@ def set_stage(workspace: Path, stage: str) -> dict:
     return pipeline
 
 
+def output_dir(workspace: Path) -> Path:
+    """Pasta de entrega do projeto: ``<raiz>/output/<nome do projeto>/`` (vídeo final, capa, legenda, texto).
+    Uma pasta por projeto, com o mesmo nome da pasta de trabalho dele em ``<raiz>/<nome>/``."""
+    return workspace.parent / "output" / workspace.name
+
+
 def finalize(workspace: Path) -> Path:
-    """Copy final video + write metadata txt to output/. Cleans up temp files."""
+    """Copy final video + write metadata txt to output/<projeto>/. Cleans up temp files."""
     import shutil
 
     pipeline = load(workspace)
-    output_dir = workspace.parent / "output"
-    output_dir.mkdir(exist_ok=True)
+    out_dir = output_dir(workspace)
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     # Determine final video file
     if pipeline["type"] == "short" and (workspace / "captioned_video.mp4").exists():
@@ -216,12 +222,12 @@ def finalize(workspace: Path) -> Path:
         raise FileNotFoundError("No edited video found in workspace")
 
     video_name = pipeline["video_name"]
-    video_dst = output_dir / f"{video_name}_final.mp4"
+    video_dst = out_dir / f"{video_name}_final.mp4"
     shutil.copy2(video_src, video_dst)
 
     # Copy SRT if available
     srt_src = workspace / "captions.srt"
-    srt_dst = output_dir / f"{video_name}.srt"
+    srt_dst = out_dir / f"{video_name}.srt"
     if srt_src.exists():
         shutil.copy2(srt_src, srt_dst)
         print(f"[finalize] SRT → {srt_dst}")
@@ -235,13 +241,13 @@ def finalize(workspace: Path) -> Path:
     # Copy thumbnail if available
     thumb_src = workspace / "thumbnail.png"
     if thumb_src.exists():
-        thumb_dst = output_dir / f"{video_name}_thumbnail.png"
+        thumb_dst = out_dir / f"{video_name}_thumbnail.png"
         shutil.copy2(thumb_src, thumb_dst)
         print(f"[finalize] Thumbnail → {thumb_dst}")
 
     # Write metadata txt
     metadata_path = workspace / "metadata.json"
-    txt_dst = output_dir / f"{video_name}.txt"
+    txt_dst = out_dir / f"{video_name}.txt"
     if metadata_path.exists():
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
         _write_metadata_txt(txt_dst, metadata, pipeline["type"])

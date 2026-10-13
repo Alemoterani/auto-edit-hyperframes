@@ -135,8 +135,7 @@ def overall_status(
 
 def _output_file(ws: Path, pipeline: dict) -> Path | None:
     """The finalized output for a done workspace, if present on disk."""
-    output_dir = ws.parent / "output"
-    candidate = output_dir / f"{pipeline.get('video_name', ws.name)}_final.mp4"
+    candidate = pl.output_dir(ws) / f"{pipeline.get('video_name', ws.name)}_final.mp4"
     return candidate if candidate.exists() else None
 
 
@@ -234,7 +233,7 @@ def detail(
 
 # ── Finished artifacts ────────────────────────────────────────────────────────
 
-# What `pipeline.finalize()` drops in <workspace root>/output/, by kind.
+# What `pipeline.finalize()` drops in <workspace root>/output/<projeto>/, by kind.
 ARTIFACT_SUFFIXES = {
     "video": "_final.mp4",
     "thumbnail": "_thumbnail.png",
@@ -264,7 +263,7 @@ def artifact_path(video_id: str, kind: str) -> Path | None:
     name = pl.load(ws).get("video_name", video_id)
     # Absolute: the library root is usually relative ("workspace"), and Flask's
     # send_file resolves a relative path against the package, not the cwd.
-    candidate = (ws.parent / "output" / f"{name}{suffix}").resolve()
+    candidate = (pl.output_dir(ws) / f"{name}{suffix}").resolve()
     return candidate if candidate.is_file() else None
 
 

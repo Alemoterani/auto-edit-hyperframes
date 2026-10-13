@@ -102,6 +102,8 @@ decrescente e marca os candidatos que se sobrepõem.
 | `ralph.sh` | Orquestrador bash que executa o pipeline stage-by-stage |
 | `assets/` | Fontes, overlays, sons para composição de vídeo |
 | `hyperframes/` | Templates HTML (overlays `lower_third`/`cta`/`highlight` + `captions`) renderizados com alpha por `auto_edit/hyperframes.py` via `npx hyperframes` |
+| `workspace/<projeto>/` | Pasta de trabalho de cada projeto (JSONs, intermediários, `cover/`, logs) |
+| `workspace/output/<projeto>/` | Entregas de cada projeto: `_final.mp4`, `_thumbnail.png`, `.srt`, `.txt` (`pipeline.output_dir`) |
 
 ## Convenções
 
@@ -151,6 +153,25 @@ Config em `~/.auto-edit/presenter.json`. Com `--backdrop` o `edited_video.mp4` �
 roda depois (no overlay/caption) e passa por você e pelo cenário juntos. Com `thumbnail: true`, a thumbnail do **long** usa o
 melhor frame com você recortado no fundo do assunto. Skills de agente em `.claude/skills/` (hyperframes, media-use,
 embedded-captions, talking-head-recut, motion-graphics). Não faz: trocar roupa nem clonar rosto/voz (sem GPU pra isso).
+
+## Capa em motion graphics (sem o apresentador)
+
+A capa mostra só as informações do vídeo, sempre na mesma identidade (template `hyperframes/cover`): foto do assunto
+no fundo, palavra gigante, 2 cartões com fotos inclinados, faixa amarela `#FFD400` com o gancho e título branco. Muda
+por vídeo só o conteúdo: fotos (Openverse: domínio público, sem chave nem custo), `word`, `main_text`, `sub_text` e a cor do
+`template` — o agente de metadata escreve `word` e `image_queries`. O quadro 0 da animação é a thumbnail; a animação
+(~2,5 s, `cover.HOOK_SECONDS`) roda por cima do começo do vídeo como gancho, sem mudar duração nem áudio (o vídeo sem
+ela fica em `hook_source.mp4`, então o `resume` não empilha). Sem `npx`, a capa volta à clássica; sem rede, sai
+só com texto no fundo escuro. Lógica em `auto_edit/cover.py` + `_thumbnail_motion` em `tools/thumbnailer.py`.
+
+```bash
+auto-edit cover search "Meu vídeo" -q "container port cranes" -q "china flag" --format 9:16  # folha cover/opcoes.png
+auto-edit cover make "Meu vídeo" --pick 2,5,7 --word SOBERANIA --highlight "Ninguém te conta" --title "O Brasil já tem dono"
+```
+
+O `make` grava `cover/cover.json` (o stage `thumbnail` passa a usar esses dados), `thumbnail_custom.png`,
+`output/<nome>/<nome>_thumbnail.png` e a prévia `cover/abertura.mp4`. Funciona antes de o vídeo existir: basta o nome da
+pasta ser o mesmo do vídeo.
 
 ## Slash Commands Disponíveis
 

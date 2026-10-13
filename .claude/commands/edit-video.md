@@ -87,7 +87,7 @@ Informar ao usuário que pode acompanhar o progresso com `/edit-status` em outra
 Mostrar onde o output ficará:
 ```
 Pipeline iniciado! Acompanhe com /edit-status
-O vídeo final será salvo em: output/<nome-do-video>_final.mp4
+O vídeo final será salvo em: output/<nome-do-video>/<nome-do-video>_final.mp4 (uma pasta por projeto, com capa, legenda e texto)
 ```
 
 ## Notas

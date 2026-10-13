@@ -221,8 +221,8 @@ def _done_ws(root: Path, wid="vid", vtype="long", metadata=None, output=True, st
         "youtube_title": "Título", "youtube_description": "Desc", "tags": ["a"],
     }))
     if output:
-        out = root / "output"
-        out.mkdir(exist_ok=True)
+        out = root / "output" / wid
+        out.mkdir(parents=True, exist_ok=True)
         (out / f"{wid}_final.mp4").write_bytes(b"\0" * 2048)
         (out / f"{wid}_thumbnail.png").write_bytes(b"png")
     return ws
@@ -297,8 +297,8 @@ class TestPublishJob:
 
         evs = []
         entry = engine.run_publish_youtube(
-            ws, body, video=lib / "output" / "vid_final.mp4",
-            thumbnail=lib / "output" / "vid_thumbnail.png", emit=evs.append, upload=fake_upload,
+            ws, body, video=lib / "output" / "vid" / "vid_final.mp4",
+            thumbnail=lib / "output" / "vid" / "vid_thumbnail.png", emit=evs.append, upload=fake_upload,
         )
         assert entry["privacy"] == "unlisted" and entry["warnings"] == ["w"]
         assert [e["pct"] for e in evs if e["type"] == "progress"] == [50, 100]

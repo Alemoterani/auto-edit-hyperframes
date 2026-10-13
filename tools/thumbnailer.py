@@ -1378,6 +1378,75 @@ def _embed_cover_frame(workspace: Path, thumb_path: Path) -> None:
             tmp.unlink(missing_ok=True)
 
 
+# ── Capa em motion graphics + abertura animada ──────────────────────────────
+
+HOOK_SOURCE = "hook_source.mp4"  # vídeo final antes da abertura: base de toda nova rodada (não empilha)
+HOOK_STAMP = "hook_source.json"
+
+
+def _final_video(workspace: Path) -> Path | None:
+    for name in ("captioned_video.mp4", "overlaid_video.mp4", "edited_video.mp4"):
+        if (workspace / name).exists():
+            return workspace / name
+    return None
+
+
+def _thumbnail_motion(workspace: Path, metadata: dict, pipeline: dict) -> tuple[Path, Path] | None:
+    """Capa do template hyperframes/cover: (thumbnail.png = quadro 0, animação .mov com alpha), ou None quando não
+    dá (sem npx, sem texto, render falhou) e o stage volta para a capa clássica."""
+    from auto_edit import cover
+
+    size = SHORT_SIZE if pipeline.get("type", "short") == "short" else LONG_SIZE
+    cdir = cover.cover_dir(workspace)
+    data = cover.load(workspace)
+    try:
+        video = _final_video(workspace)
+        render_size = probe.video_specs(video)[:2] if video else ((1080, 1920) if size == SHORT_SIZE else (1920, 1080))
+        if data:
+            images = [cdir / n for n in data.get("images", [])]
+        else:
+            data = cover.from_metadata(metadata)
+            if not (data["title"] or data["word"]):
+                return None
+            try:  # sem rede ou sem foto: capa só com texto, no fundo escuro da marca
+                found = cover.fetch(data["queries"][:3], cdir / "auto", cover.orientation(size))
+                images = [paths[0] for paths in found if paths]
+            except Exception as e:
+                print(f"[thumbnailer] fotos do assunto indisponíveis ({e}) — capa só com texto")
+                images = []
+        mov = cover.render(data, images, render_size, cdir)
+        thumb = cover.first_frame(mov, workspace / "thumbnail.png", size)
+        print(f"[thumbnailer] Capa em motion → {thumb}")
+        return thumb, mov
+    except Exception as e:
+        print(f"[thumbnailer] capa em motion indisponível ({e}) — usando a capa clássica")
+        return None
+
+
+def _apply_hook(workspace: Path, video: Path, mov: Path) -> None:
+    """A animação da capa por cima dos primeiros segundos do vídeo (gancho). Mesma duração, áudio intocado.
+
+    O vídeo sem abertura fica em hook_source.mp4; numa nova rodada, se o vídeo atual é o que este stage deixou
+    (hook_source.json), refaz a partir dele em vez de empilhar duas aberturas.
+    """
+    from auto_edit import cover
+    from tools import overlayer
+
+    src, stamp = workspace / HOOK_SOURCE, workspace / HOOK_STAMP
+    try:
+        ours = json.loads(stamp.read_text())["mtime"] == video.stat().st_mtime_ns
+    except (OSError, ValueError, KeyError):
+        ours = False
+    if not (ours and src.is_file()):
+        # ponytail: um vídeo antigo que já tinha a capa parada de 2 quadros guarda essa capa no original; ela fica
+        # por baixo da abertura. Só some refazendo o caption/overlay.
+        shutil.copy2(video, src)
+    out = workspace / "hook_video.mp4"
+    overlayer._run_ffmpeg_overlay(src, [{"asset": str(mov), "start": 0.0, "end": cover.HOOK_SECONDS}], out)
+    out.replace(video)
+    print(f"[thumbnailer] Abertura animada aplicada em {video.name}")
+
+
 # ── Entry point ─────────────────────────────────────────────────────────────
 
 
@@ -1394,10 +1463,23 @@ def thumbnail(workspace: Path) -> None:
 
     video_type = pipeline.get("type", "short")
 
-    # Capa feita à mão (ex.: exportada de um design) tem prioridade: sem isso, todo
-    # resume regerava a automática por cima dela no thumbnail.png e no output/.
+    # Capa em motion (cover.json do `auto-edit cover make`, ou montada do metadata) vem primeiro. Capa feita à mão
+    # (thumbnail_custom.png sem cover.json) tem prioridade sobre a automática: sem isso, todo resume regerava a
+    # automática por cima dela no thumbnail.png e no output/.
     custom = workspace / CUSTOM_THUMBNAIL
-    if custom.is_file():
+    motion = None
+    if (workspace / "cover" / "cover.json").is_file() or not custom.is_file():
+        motion = _thumbnail_motion(workspace, metadata, pipeline)
+    video = _final_video(workspace)
+    if motion:
+        thumb, mov = motion
+        if video:
+            try:
+                _apply_hook(workspace, video, mov)
+            except Exception as e:  # a abertura é um extra: sem ela o vídeo sai como antes
+                print(f"[thumbnailer] abertura animada não aplicada: {e}")
+                motion = None
+    elif custom.is_file():
         thumb = workspace / "thumbnail.png"
         shutil.copy2(custom, thumb)
         print(f"[thumbnailer] Usando a capa personalizada {CUSTOM_THUMBNAIL}")
@@ -1408,6 +1490,8 @@ def thumbnail(workspace: Path) -> None:
 
     # Embed thumbnail as first frame so platforms pick it up as cover
     _embed_cover_frame(workspace, thumb)
+    if motion and video:  # marca o vídeo como "nosso, já com abertura": a próxima rodada refaz a partir do original
+        (workspace / HOOK_STAMP).write_text(json.dumps({"mtime": video.stat().st_mtime_ns}))
 
 
 if __name__ == "__main__":

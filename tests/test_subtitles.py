@@ -140,8 +140,8 @@ def _done_ws(root, vtype="long", srt=True):
     (ws / "pipeline.json").write_text(json.dumps({"video_name": "vid", "type": vtype, "language": "pt",
                                                   "current_stage": "done", "stages": {}}), encoding="utf-8")
     (ws / "metadata.json").write_text(json.dumps({"youtube_title": "T", "pinned_comment": "App ou terminal?"}), encoding="utf-8")
-    out = root / "output"
-    out.mkdir()
+    out = root / "output" / "vid"
+    out.mkdir(parents=True)
     (out / "vid_final.mp4").write_bytes(b"\0" * 64)
     if srt:
         (out / "vid.srt").write_text("1\n", encoding="utf-8")
@@ -173,8 +173,8 @@ class TestEngine:
             return {"video_id": "x", "url": "u", "warnings": [], "captions": True, "comment_id": "c"}
 
         body = yt.build_body(title="T", description="", tags=[], privacy="unlisted")
-        entry = engine.run_publish_youtube(ws, body, video=lib / "output" / "vid_final.mp4", thumbnail=None,
-                                           emit=lambda e: None, captions=lib / "output" / "vid.srt",
+        entry = engine.run_publish_youtube(ws, body, video=lib / "output" / "vid" / "vid_final.mp4", thumbnail=None,
+                                           emit=lambda e: None, captions=lib / "output" / "vid" / "vid.srt",
                                            language="pt", comment="?", upload=fake_upload)
         assert seen["captions"].name == "vid.srt" and seen["language"] == "pt" and seen["comment"] == "?"
         assert entry["captions"] is True and entry["comment_id"] == "c"

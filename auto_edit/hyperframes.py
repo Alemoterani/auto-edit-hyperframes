@@ -69,17 +69,22 @@ def render(
     height: int,
     duration: float,
     fps: str | None = None,
+    files: dict[str, Path] | None = None,
 ) -> Path:
     """Render `template` with `data` to <out_dir>/<hash>.mov and return its path.
 
-    Identical inputs reuse the cached file, so `resume` doesn't re-render.
-    Raises RuntimeError if npx is missing or the render fails.
+    `files` = {nome no projeto: arquivo} copiados ao lado do index.html (ex.: as fotos da capa),
+    referenciados em `data` pelo nome. Identical inputs reuse the cached file, so `resume` doesn't
+    re-render. Raises RuntimeError if npx is missing or the render fails.
     """
     src = template_dir(template)
     html = _patch_root((src / "index.html").read_text(encoding="utf-8"), width, height, duration)
     data_js = f"window.AE_DATA = {json.dumps(data, ensure_ascii=False)};\n"
 
-    key = hashlib.sha256(f"{html}\0{data_js}\0{fps}".encode("utf-8")).hexdigest()[:16]
+    digest = hashlib.sha256(f"{html}\0{data_js}\0{fps}".encode("utf-8"))
+    for name, path in sorted((files or {}).items()):  # trocar uma foto com o mesmo nome invalida o cache
+        digest.update(name.encode("utf-8") + Path(path).read_bytes())
+    key = digest.hexdigest()[:16]
     out_dir.mkdir(parents=True, exist_ok=True)
     output = out_dir / f"{template}-{key}.mov"
     if output.is_file() and output.stat().st_size > 0:
@@ -95,6 +100,8 @@ def render(
         shutil.copytree(src, project)
         (project / "index.html").write_text(html, encoding="utf-8")
         (project / "data.js").write_text(data_js, encoding="utf-8")
+        for name, path in (files or {}).items():
+            shutil.copy2(path, project / name)
         # One Chrome per worker (~256 MB + a CPU core each). HyperFrames' "auto"
         # saturates every core; default to 1 so a render can't starve the machine.
         workers = os.environ.get("AUTO_EDIT_HF_WORKERS", "1")

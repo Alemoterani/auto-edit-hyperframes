@@ -1,4 +1,4 @@
-"""`auto-edit cover ...` — capa em motion graphics com fotos do assunto (Pexels): buscar opções e montar."""
+"""`auto-edit cover ...` — capa em motion graphics com fotos do assunto (Openverse): buscar opções e montar."""
 from __future__ import annotations
 
 import json

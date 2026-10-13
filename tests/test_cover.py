@@ -1,10 +1,9 @@
-"""Testes da capa em motion graphics: Pexels, render com fotos, folha de opções e a abertura sem empilhar."""
+"""Testes da capa em motion graphics: busca no Openverse, render com fotos, folha de opções e a abertura sem empilhar."""
 import io
 import json
 import sys
 from pathlib import Path
 
-import pytest
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -13,27 +12,33 @@ from auto_edit import cover, hyperframes, stock  # noqa: E402
 from tools import overlayer, thumbnailer  # noqa: E402
 
 
-def test_search_needs_key(monkeypatch):
-    monkeypatch.delenv("PEXELS_API_KEY", raising=False)
-    with pytest.raises(RuntimeError, match="PEXELS_API_KEY"):
-        stock.search("port")
-
-
-def test_search_parses_photos_and_sends_key(monkeypatch):
-    monkeypatch.setenv("PEXELS_API_KEY", "k123")
-    seen = {}
-    body = {"photos": [{"id": 1, "alt": "cranes", "photographer": "Ana", "src": {"large2x": "https://x/1.jpg"}},
-                       {"id": 2, "src": {"large2x": "https://x/2.jpg"}}]}
+def test_search_asks_public_domain_large_photos_in_the_cover_shape(monkeypatch):
+    urls = []
+    body = {"results": [{"id": "a", "title": "cranes", "creator": "Ana", "url": "https://x/1.jpg"},
+                        {"id": "b", "url": "https://x/2.jpg"}]}
 
     def fake_open(req, timeout=30):
-        seen["url"], seen["auth"] = req.full_url, req.get_header("Authorization")
+        urls.append(req.full_url)
         return io.BytesIO(json.dumps(body).encode())
 
     monkeypatch.setattr(stock, "_open", fake_open)
     photos = stock.search("container port", "portrait", 2)
     assert [p["url"] for p in photos] == ["https://x/1.jpg", "https://x/2.jpg"]
-    assert photos[0]["photographer"] == "Ana" and seen["auth"] == "k123"
-    assert "orientation=portrait" in seen["url"] and "per_page=2" in seen["url"]
+    assert photos[0]["photographer"] == "Ana"
+    assert "license=cc0%2Cpdm" in urls[0] and "aspect_ratio=tall" in urls[0] and "page_size=2" in urls[0]
+
+
+def test_search_drops_the_shape_when_nothing_matches_it(monkeypatch):
+    urls = []
+
+    def fake_open(req, timeout=30):
+        urls.append(req.full_url)
+        results = [] if "aspect_ratio" in req.full_url else [{"id": "c", "url": "https://x/3.jpg"}]
+        return io.BytesIO(json.dumps({"results": results}).encode())
+
+    monkeypatch.setattr(stock, "_open", fake_open)
+    assert [p["url"] for p in stock.search("grain freight train")] == ["https://x/3.jpg"]
+    assert len(urls) == 2 and "aspect_ratio" not in urls[1]
 
 
 def test_from_metadata_maps_thumbnail_fields():
@@ -96,7 +101,6 @@ def test_stage_falls_back_to_classic_cover_when_motion_fails(tmp_path, monkeypat
     monkeypatch.setattr(cover, "render", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("sem npx")))
     classic = tmp_path / "thumbnail.png"
     monkeypatch.setattr(thumbnailer, "_thumbnail_short", lambda *a: classic)
-    monkeypatch.delenv("PEXELS_API_KEY", raising=False)
     embedded = []
     monkeypatch.setattr(thumbnailer, "_embed_cover_frame", lambda ws, thumb: embedded.append(thumb))
     thumbnailer.thumbnail(tmp_path)

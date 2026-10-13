@@ -54,7 +54,7 @@ Generate a `thumbnail` object with text optimized for a video thumbnail image. T
   - `"gadget"` — review de produto, unboxing, comparativo de gadgets
   If none fits, use `"dev"`.
 - `word`: ONE word, the concept of the video, rendered huge on the cover (e.g. `"SOBERANIA"`, `"JUROS"`, `"1964"`). Same language as the video, max 10 letters.
-- `image_queries`: 3 short **English** stock-photo searches for eye-catching photos of the video's subject (Pexels). The first becomes the background, the other two the floating cards. Concrete, visual things, never abstract ideas: ✅ `"container port cranes"`, `"high voltage transmission tower"`, `"china flag"`; ❌ `"sovereignty"`, `"dependence"`. Never people's faces.
+- `image_queries`: 3 short **English** stock-photo searches for eye-catching photos of the video's subject (public-domain photos from Openverse). The first becomes the background, the other two the floating cards. Concrete, visual things, never abstract ideas: ✅ `"container port cranes"`, `"high voltage transmission tower"`, `"china flag"`; ❌ `"sovereignty"`, `"dependence"`. Never people's faces.
 
 ## Language
 

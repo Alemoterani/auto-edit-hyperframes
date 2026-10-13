@@ -1408,7 +1408,7 @@ def _thumbnail_motion(workspace: Path, metadata: dict, pipeline: dict) -> tuple[
             data = cover.from_metadata(metadata)
             if not (data["title"] or data["word"]):
                 return None
-            try:  # sem chave do Pexels ou sem rede: capa só com texto, no fundo escuro da marca
+            try:  # sem rede ou sem foto: capa só com texto, no fundo escuro da marca
                 found = cover.fetch(data["queries"][:3], cdir / "auto", cover.orientation(size))
                 images = [paths[0] for paths in found if paths]
             except Exception as e:

@@ -2,7 +2,7 @@
 Capa do vídeo em motion graphics, sem o apresentador (template ``hyperframes/cover``).
 
 O quadro 0 da animação é a thumbnail; a animação inteira (~2,5 s) abre o vídeo como gancho. Por vídeo mudam só as
-fotos do assunto (Pexels, ``auto_edit/stock.py``), a palavra gigante, a faixa amarela, o título e a cor de brilho.
+fotos do assunto (Openverse, domínio público, ``auto_edit/stock.py``), a palavra gigante, a faixa amarela, o título e a cor de brilho.
 
 Os dados ficam em ``<workspace>/cover/cover.json`` (``auto-edit cover make``); sem ele, o stage ``thumbnail`` monta
 tudo do ``metadata.json`` com a 1ª foto de cada busca.
@@ -71,11 +71,12 @@ def orientation(size: tuple[int, int]) -> str:
 
 
 def fetch(queries: list[str], dest: Path, orient: str, per_query: int = 1) -> list[list[Path]]:
-    """Baixa ``per_query`` fotos por busca em ``dest``; devolve uma lista de arquivos por busca."""
+    """Baixa ``per_query`` fotos por busca em ``dest``; devolve uma lista de arquivos por busca. A 1ª busca é o
+    fundo (no formato da capa); as outras viram os cartões, que são horizontais nos dois formatos."""
     found = []
     for qi, q in enumerate(queries, 1):
         paths = []
-        for pi, photo in enumerate(stock.search(q, orient, per_query), 1):
+        for pi, photo in enumerate(stock.search(q, orient if qi == 1 else "landscape", per_query), 1):
             paths.append(stock.download(photo["url"], dest / f"q{qi}_{pi}.jpg"))
         found.append(paths)
     return found

@@ -72,7 +72,8 @@ def search(
 @cover_app.command()
 def make(
     name: str = typer.Argument(..., help="Nome do vídeo no workspace"),
-    pick: str = typer.Option(..., "--pick", help="Números da folha: fundo, cartão 1, cartão 2 (ex.: 2,5,9)"),
+    pick: Optional[str] = typer.Option(None, "--pick", help="Números da folha: fundo, cartão 1, cartão 2 (ex.: 2,5,9)"),
+    image: Optional[List[Path]] = typer.Option(None, "--image", exists=True, dir_okay=False, help="Imagem do disco no lugar do --pick (fundo, cartão 1, cartão 2); só uma = cena inteira, sem cartões"),
     word: Optional[str] = typer.Option(None, "--word", help="Palavra gigante"),
     title: Optional[str] = typer.Option(None, "--title", help="Título branco"),
     highlight: Optional[str] = typer.Option(None, "--highlight", help="Gancho na faixa amarela"),
@@ -82,12 +83,22 @@ def make(
     """Monta a capa (thumbnail + abertura animada) e salva onde o pipeline usa."""
     ws = workspace_root() / name
     cdir = cover.cover_dir(ws)
-    try:
-        options = json.loads((cdir / "options.json").read_text(encoding="utf-8"))
-        chosen = [options[int(i) - 1] for i in pick.split(",") if i.strip()]
-    except (OSError, ValueError, IndexError):
-        console.print(f"[red]Rode antes `auto-edit cover search \"{name}\"` e use números da folha[/red]")
-        raise typer.Exit(1)
+    if image:
+        chosen = []
+        for i, src in enumerate(image[:3]):  # copia para a pasta da capa: o cover.json só guarda nomes relativos
+            dst = cdir / f"imagem{i + 1}{src.suffix.lower()}"
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(src.read_bytes())
+            chosen.append(dst.name)
+    else:
+        try:
+            options = json.loads((cdir / "options.json").read_text(encoding="utf-8"))
+            chosen = [options[int(i) - 1] for i in (pick or "").split(",") if i.strip()]
+            if not chosen:
+                raise ValueError
+        except (OSError, ValueError, IndexError):
+            console.print(f"[red]Use --image, ou rode antes `auto-edit cover search \"{name}\"` e escolha com --pick[/red]")
+            raise typer.Exit(1)
     data = cover.load(ws) or cover.from_metadata(_metadata(ws))
     for key, value in (("word", word), ("title", title), ("highlight", highlight), ("signature", signature)):
         if value is not None:

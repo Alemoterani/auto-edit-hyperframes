@@ -57,6 +57,9 @@
         #bar { align-self: center; font-size: 7.5vmin; }
         #title { font-size: 13vmin; }
         #sig { left: 6%; top: 14%; font-size: 3.4vmin; }
+        /* Só a foto de fundo (sem cartões): a cena ocupa tudo e a palavra desce para o meio */
+        .solo #word { top: 33%; }
+        .solo #bg { filter: brightness(0.88) contrast(1.08) saturate(1.2); }
       }
     </style>
   </head>
@@ -79,6 +82,7 @@
       if (bgSrc) $("bg").src = bgSrc; else $("bg").remove();
       if (c1Src) $("c1").src = c1Src; else { $("c1").remove(); $("arrow").remove(); }
       if (c2Src) $("c2").src = c2Src; else $("c2").remove();
+      if (!c1Src && !c2Src) $("root").classList.add("solo");
       $("word").textContent = (d.word || "").toUpperCase();
       $("title").textContent = d.title || "";
       if (d.highlight) $("bar").textContent = d.highlight.toUpperCase(); else $("bar").remove();

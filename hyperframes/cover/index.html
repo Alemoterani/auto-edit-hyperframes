@@ -1,0 +1,114 @@
+<!doctype html>
+<!-- Cover: a capa do vídeo em motion graphics (identidade "Autoridade Editorial", sem o apresentador).
+     Quadro 0 = capa completa: vira a thumbnail e os 2 primeiros quadros do vídeo.
+     0–0,6 s: brilho cruza a palavra e o fundo aproxima. 0,6–1,1 s: o fundo fecha em cortina e os cartões voam,
+     revelando o vídeo por baixo (alpha). Palavra, faixa e título ficam sobre o gancho falado e saem no fim.
+     Data: window.AE_DATA = {word, title, highlight, images: [fundo, cartão 1, cartão 2], accent, signature}
+     (escrito por auto_edit/hyperframes.py; as imagens são copiadas para a pasta do projeto).
+     Paisagem: texto à esquerda, cartões à direita. Retrato: palavra no topo, cartões no meio, texto na zona segura. -->
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Montserrat:wght@700;800&display=block" />
+    <script src="data.js"></script>
+    <style>
+      html, body { margin: 0; background: transparent; }
+      #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; font-family: Anton, Impact, "Arial Narrow", sans-serif; }
+      #scene { position: absolute; inset: 0; overflow: hidden; clip-path: inset(0% 0% 0% 0%); background: #0b1220; }
+      #bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: brightness(0.55) contrast(1.12) saturate(1.15); }
+      #shade { position: absolute; inset: 0; }
+      #grain { position: absolute; inset: 0; opacity: 0.18; mix-blend-mode: overlay;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>"); }
+      #word { position: absolute; white-space: nowrap; line-height: 0.9; letter-spacing: 0.01em; transform-origin: center;
+        background: linear-gradient(100deg, #eeece6 42%, #ffffff 50%, #eeece6 58%); background-size: 300% 100%; background-position: 100% 0;
+        -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0.8vmin 2.4vmin rgba(0, 0, 0, 0.55)); }
+      .card { position: absolute; object-fit: cover; box-sizing: border-box; border: 0.7vmin solid #fff; border-radius: 1.6vmin;
+        box-shadow: 0 2vmin 5vmin rgba(0, 0, 0, 0.6), 0 0 4vmin var(--glow); }
+      #arrow { position: absolute; overflow: visible; }
+      #arrow path { fill: none; stroke: #fff; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+      #copy { position: absolute; display: flex; flex-direction: column; gap: 2.2vmin; }
+      #bar { align-self: flex-start; background: #ffd400; color: #000; line-height: 1; padding: 0.25em 0.45em 0.2em; transform-origin: left center; }
+      #title { color: #fff; line-height: 0.98; text-transform: uppercase; -webkit-text-stroke: 0.05em #000; paint-order: stroke fill;
+        text-shadow: 0 0.6vmin 2vmin rgba(0, 0, 0, 0.7); }
+      #sig { position: absolute; font-family: Montserrat, "Segoe UI", Arial, sans-serif; font-weight: 800; color: #fff; opacity: 0.92;
+        letter-spacing: 0.02em; text-shadow: 0 0.3vmin 1vmin rgba(0, 0, 0, 0.7); }
+
+      @media (min-aspect-ratio: 1/1) {
+        #shade { background: linear-gradient(90deg, rgba(6, 10, 20, 0.94) 0%, rgba(6, 10, 20, 0.7) 40%, rgba(6, 10, 20, 0.15) 75%),
+          radial-gradient(60% 70% at 78% 55%, color-mix(in srgb, var(--glow) 28%, transparent), transparent 70%); }
+        #word { right: 4%; top: 5%; }
+        #c1 { right: 5%; top: 40%; width: 30%; aspect-ratio: 4 / 3; transform: rotate(4deg); }
+        #c2 { right: 31%; top: 56%; width: 21%; aspect-ratio: 4 / 3; transform: rotate(-6deg); }
+        #arrow { left: 43%; top: 33%; width: 12%; }
+        #copy { left: 4%; top: 50%; width: 44%; transform: translateY(-50%); }
+        #bar { font-size: 6vmin; }
+        #title { font-size: 11vmin; }
+        #sig { left: 4%; top: 5.5%; font-size: 2.6vmin; }
+      }
+      @media (max-aspect-ratio: 1/1) {
+        #shade { background: linear-gradient(180deg, rgba(6, 10, 20, 0.35) 0%, rgba(6, 10, 20, 0.2) 40%, rgba(6, 10, 20, 0.88) 66%, rgba(6, 10, 20, 0.97) 100%),
+          radial-gradient(70% 40% at 50% 45%, color-mix(in srgb, var(--glow) 25%, transparent), transparent 70%); }
+        #word { left: 50%; top: 19%; transform: translateX(-50%); }
+        #c1 { right: 6%; top: 34%; width: 54%; aspect-ratio: 4 / 3; transform: rotate(4deg); }
+        #c2 { left: 6%; top: 45%; width: 44%; aspect-ratio: 4 / 3; transform: rotate(-6deg); }
+        #arrow { left: 8%; top: 31%; width: 22%; }
+        #copy { left: 6%; right: 6%; bottom: 22%; align-items: center; text-align: center; }
+        #bar { align-self: center; font-size: 7.5vmin; }
+        #title { font-size: 13vmin; }
+        #sig { left: 6%; top: 14%; font-size: 3.4vmin; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="2.5" data-width="1920" data-height="1080">
+      <section class="clip" data-start="0" data-duration="2.5" style="position:absolute;inset:0">
+        <div id="scene"><img id="bg" alt="" /><div id="shade"></div><div id="grain"></div></div>
+        <div id="word"></div>
+        <img id="c2" class="card" alt="" /><img id="c1" class="card" alt="" />
+        <svg id="arrow" viewBox="0 0 200 120"><path d="M8 100 C 60 20, 130 10, 182 40" /><path d="M150 18 L 184 40 L 150 66" /></svg>
+        <div id="copy"><div id="bar"></div><div id="title"></div></div>
+        <div id="sig"></div>
+      </section>
+    </div>
+    <script>
+      const d = Object.assign({ word: "", title: "", highlight: "", images: [], accent: "#5aa0ff", signature: "" }, window.AE_DATA || {});
+      document.documentElement.style.setProperty("--glow", d.accent);
+      const $ = (id) => document.getElementById(id);
+      const [bgSrc, c1Src, c2Src] = d.images;
+      if (bgSrc) $("bg").src = bgSrc; else $("bg").remove();
+      if (c1Src) $("c1").src = c1Src; else { $("c1").remove(); $("arrow").remove(); }
+      if (c2Src) $("c2").src = c2Src; else $("c2").remove();
+      $("word").textContent = (d.word || "").toUpperCase();
+      $("title").textContent = d.title || "";
+      if (d.highlight) $("bar").textContent = d.highlight.toUpperCase(); else $("bar").remove();
+      if (d.signature) $("sig").textContent = d.signature; else $("sig").remove();
+
+      // A palavra gigante ocupa a largura reservada para ela, nunca mais (uma palavra não quebra linha)
+      const landscape = innerWidth >= innerHeight;
+      function fitWord() {
+        const w = $("word"), max = (landscape ? 0.56 : 0.92) * $("root").clientWidth;
+        w.style.fontSize = (landscape ? 30 : 34) + "vmin";
+        if (w.scrollWidth > max) w.style.fontSize = (parseFloat(getComputedStyle(w).fontSize) * max / w.scrollWidth) + "px";
+      }
+      fitWord();
+      if (document.fonts) document.fonts.ready.then(fitWord);
+
+      const total = parseFloat($("root").dataset.duration);
+      const out = Math.max(1.6, total - 0.35);
+      const tl = gsap.timeline({ paused: true });
+      tl.to("#word", { backgroundPosition: "0% 0", duration: 0.6, ease: "power1.inOut" }, 0)
+        .to("#bg", { scale: 1.06, duration: 1.1, ease: "none" }, 0)
+        .to("#scene", { clipPath: "inset(0% 50% 0% 50%)", duration: 0.5, ease: "power3.in" }, 0.6)
+        .to("#c1", { xPercent: 140, rotation: 18, opacity: 0, duration: 0.45, ease: "back.in(1.6)" }, 0.6)
+        .to("#c2", { xPercent: -160, rotation: -20, opacity: 0, duration: 0.45, ease: "back.in(1.6)" }, 0.65)
+        .to("#arrow", { opacity: 0, duration: 0.25 }, 0.6)
+        .to("#sig", { opacity: 0, duration: 0.25 }, 0.6)
+        .to("#word", { yPercent: -40, opacity: 0, duration: 0.35, ease: "power2.in" }, out)
+        .to("#bar", { scaleX: 0, duration: 0.3, ease: "power2.in" }, out)
+        .to("#title", { yPercent: 40, opacity: 0, duration: 0.35, ease: "power2.in" }, out);
+      window.__timelines = window.__timelines || {};
+      window.__timelines.main = tl;
+    </script>
+  </body>
+</html>

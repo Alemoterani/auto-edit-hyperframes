@@ -128,6 +128,7 @@ decrescente e marca os candidatos que se sobrepõem.
 | `AUTO_EDIT_OVERLAYS_STRICT` | — | `1` faz o stage `overlay` falhar quando um overlay planejado não é encontrado. Por padrão ele só avisa e renderiza sem — os MP4s são de cada pessoa e ficam fora do repo |
 | `AUTO_EDIT_SEGMENT_THRESHOLD` | `12` | Acima de N segmentos, o `execute` corta um-a-um + concat (evita OOM do FFmpeg em vídeo longo/4K) |
 | `GEMINI_API_KEY` | — | API key para correção de texto via Gemini |
+| `PEXELS_API_KEY` | — | Chave grátis (pexels.com/api) para as fotos do assunto na capa (`auto-edit cover`). Sem ela a capa sai só com texto |
 | `AUTO_EDIT_YT_CLIENT_SECRET` | — | Caminho do JSON de OAuth client (Desktop) do Google Cloud, pro `auto-edit insights auth youtube` e `auto-edit publish auth youtube`. Sem ele, reaproveita o client de um token já salvo. Publish e insights usam **uma conexão só** (`auto_edit/youtube_auth.py`, `tokens/youtube.json`). App OAuth em modo "Testing" expira o token em 7 dias: publique o app ("In production") pra não expirar |
 | `AUTO_EDIT_YT_CATEGORY` | `28` | Categoria do YouTube nos uploads do `publish` (28 = Ciência e tecnologia) |
 | `AUTO_EDIT_WORKSPACE` | `workspace` | Pasta raiz que guarda os workspaces por vídeo (CLI, MCP e motor headless) |
@@ -151,6 +152,25 @@ Config em `~/.auto-edit/presenter.json`. Com `--backdrop` o `edited_video.mp4` �
 roda depois (no overlay/caption) e passa por você e pelo cenário juntos. Com `thumbnail: true`, a thumbnail do **long** usa o
 melhor frame com você recortado no fundo do assunto. Skills de agente em `.claude/skills/` (hyperframes, media-use,
 embedded-captions, talking-head-recut, motion-graphics). Não faz: trocar roupa nem clonar rosto/voz (sem GPU pra isso).
+
+## Capa em motion graphics (sem o apresentador)
+
+A capa mostra só as informações do vídeo, sempre na mesma identidade (template `hyperframes/cover`): foto do assunto
+no fundo, palavra gigante, 2 cartões com fotos inclinados, faixa amarela `#FFD400` com o gancho e título branco. Muda
+por vídeo só o conteúdo: fotos (Pexels, grátis: `PEXELS_API_KEY`), `word`, `main_text`, `sub_text` e a cor do
+`template` — o agente de metadata escreve `word` e `image_queries`. O quadro 0 da animação é a thumbnail; a animação
+(~2,5 s, `cover.HOOK_SECONDS`) roda por cima do começo do vídeo como gancho, sem mudar duração nem áudio (o vídeo sem
+ela fica em `hook_source.mp4`, então o `resume` não empilha). Sem `npx`, a capa volta à clássica; sem chave/rede, sai
+só com texto no fundo escuro. Lógica em `auto_edit/cover.py` + `_thumbnail_motion` em `tools/thumbnailer.py`.
+
+```bash
+auto-edit cover search "Meu vídeo" -q "container port cranes" -q "china flag" --format 9:16  # folha cover/opcoes.png
+auto-edit cover make "Meu vídeo" --pick 2,5,7 --word SOBERANIA --highlight "Ninguém te conta" --title "O Brasil já tem dono"
+```
+
+O `make` grava `cover/cover.json` (o stage `thumbnail` passa a usar esses dados), `thumbnail_custom.png`,
+`output/<nome>_thumbnail.png` e a prévia `cover/abertura.mp4`. Funciona antes de o vídeo existir: basta o nome da
+pasta ser o mesmo do vídeo.
 
 ## Slash Commands Disponíveis
 

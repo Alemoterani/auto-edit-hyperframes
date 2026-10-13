@@ -53,6 +53,8 @@ Generate a `thumbnail` object with text optimized for a video thumbnail image. T
   - `"maker"` — impressão 3D, hardware, firmware, montagens, mods
   - `"gadget"` — review de produto, unboxing, comparativo de gadgets
   If none fits, use `"dev"`.
+- `word`: ONE word, the concept of the video, rendered huge on the cover (e.g. `"SOBERANIA"`, `"JUROS"`, `"1964"`). Same language as the video, max 10 letters.
+- `image_queries`: 3 short **English** stock-photo searches for eye-catching photos of the video's subject (Pexels). The first becomes the background, the other two the floating cards. Concrete, visual things, never abstract ideas: ✅ `"container port cranes"`, `"high voltage transmission tower"`, `"china flag"`; ❌ `"sovereignty"`, `"dependence"`. Never people's faces.
 
 ## Language
 
@@ -79,7 +81,9 @@ Schema for short:
   "thumbnail": {
     "main_text": "PEÇA 3D QUEBROU",
     "sub_text": "E A IA RESOLVEU?",
-    "template": "maker"
+    "template": "maker",
+    "word": "QUEBROU",
+    "image_queries": ["3d printer", "broken plastic part", "robot arm"]
   }
 }
 
@@ -98,6 +102,8 @@ Schema for long:
     "main_text": "META AI RAY-BAN GEN 2",
     "sub_text": "VALE OS R$1500?",
     "template": "gadget",
-    "logos": ["meta", "rayban"]
+    "logos": ["meta", "rayban"],
+    "word": "GEN 2",
+    "image_queries": ["smart glasses", "camera lens closeup", "price tag"]
   }
 }

@@ -26,6 +26,7 @@ from auto_edit.insights import insights_app
 from auto_edit.publish.cli import publish_app
 from auto_edit.plan import plan_app
 from auto_edit.presenter_cli import presenter_app
+from auto_edit.cover_cli import cover_app
 from auto_edit.workspace import get_workspace, init_workspace, get_status_table
 
 
@@ -47,6 +48,7 @@ app.add_typer(ideas_app, name="ideas")
 app.add_typer(insights_app, name="insights")
 app.add_typer(publish_app, name="publish")
 app.add_typer(presenter_app, name="presenter")
+app.add_typer(cover_app, name="cover")
 
 
 @app.callback(invoke_without_command=True)
